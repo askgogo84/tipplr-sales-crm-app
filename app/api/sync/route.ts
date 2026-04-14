@@ -32,6 +32,13 @@ type RestaurantPayload = {
   lead_status: string
   assigned_to_name: string | null
   remarks: string | null
+  converted?: string | null
+  documents_received?: string | null
+  go_live_on_digihat?: string | null
+  go_live_date?: string | null
+  menu_pricing?: string | null
+  last_contacted_on?: string | null
+  reason?: string | null
 }
 
 export async function GET() {
@@ -43,7 +50,10 @@ export async function GET() {
     const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     if (!GOOGLE_SHEET_ID) {
-      return Response.json({ success: false, step: 'env', error: 'Missing GOOGLE_SHEET_ID' }, { status: 500 })
+      return Response.json(
+        { success: false, step: 'env', error: 'Missing GOOGLE_SHEET_ID' },
+        { status: 500 }
+      )
     }
 
     if (!GOOGLE_SERVICE_ACCOUNT_EMAIL) {
@@ -54,7 +64,10 @@ export async function GET() {
     }
 
     if (!GOOGLE_PRIVATE_KEY) {
-      return Response.json({ success: false, step: 'env', error: 'Missing GOOGLE_PRIVATE_KEY' }, { status: 500 })
+      return Response.json(
+        { success: false, step: 'env', error: 'Missing GOOGLE_PRIVATE_KEY' },
+        { status: 500 }
+      )
     }
 
     if (!SUPABASE_URL) {
@@ -89,7 +102,8 @@ export async function GET() {
       )
     }
 
-    const range = encodeURIComponent("'Final List'!A2:K")
+    // Final List tab, columns A to T
+    const range = encodeURIComponent("'Final List'!A2:T")
 
     const googleRes = await withTimeout(
       fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_ID}/values/${range}`, {
@@ -117,22 +131,29 @@ export async function GET() {
     const dedupedMap = new Map<string, RestaurantPayload>()
 
     for (const row of rows) {
-      const restaurant_name = String(row[0] ?? '').trim()
-      const priority = String(row[1] ?? '').trim()
-      const outlets = String(row[2] ?? '').trim()
-      const pos = String(row[3] ?? '').trim()
-      const brand_contact_person = String(row[4] ?? '').trim()
-      const designation = String(row[5] ?? '').trim()
-      const contact_no = String(row[6] ?? '').trim()
-      const zomato_page_number = String(row[7] ?? '').trim()
-      const contacted = String(row[8] ?? '').trim()
-      const tipplr_executive_name = String(row[9] ?? '').trim()
-      const approached_on = String(row[10] ?? '').trim()
+      const restaurant_name = String(row[0] ?? '').trim()          // A
+      const priority = String(row[1] ?? '').trim()                 // B
+      const outlets = String(row[2] ?? '').trim()                  // C
+      const pos = String(row[3] ?? '').trim()                      // D
+      const brand_contact_person = String(row[4] ?? '').trim()     // E
+      const designation = String(row[5] ?? '').trim()              // F
+      const contact_no = String(row[6] ?? '').trim()               // G
+      const zomato_page_number = String(row[7] ?? '').trim()       // H
+      const contacted = String(row[8] ?? '').trim()                // I
+      const tipplr_executive_name = String(row[9] ?? '').trim()    // J
+      const approached_on = String(row[10] ?? '').trim()           // K
+
+      const status = String(row[11] ?? '').trim()                  // L
+      const converted = String(row[12] ?? '').trim()               // M
+      const documents_received = String(row[13] ?? '').trim()      // N
+      const go_live_on_digihat = String(row[14] ?? '').trim()      // O
+      const go_live_date = String(row[15] ?? '').trim()            // P
+      const menu_pricing = String(row[16] ?? '').trim()            // Q
+      // row[17] = R, currently unused
+      const last_contacted_on = String(row[18] ?? '').trim()       // S
+      const reason = String(row[19] ?? '').trim()                  // T
 
       if (!restaurant_name) continue
-
-      const lead_status =
-        contacted.toLowerCase() === 'yes' ? 'Contacted' : 'Lead'
 
       const remarksParts = [
         priority ? `Priority: ${priority}` : '',
@@ -149,12 +170,20 @@ export async function GET() {
         phone: contact_no || null,
         area: null,
         city: 'Bengaluru',
-        lead_status,
+        lead_status:
+          status || (contacted.toLowerCase() === 'yes' ? 'Contacted' : 'Lead'),
         assigned_to_name: tipplr_executive_name || null,
         remarks: remarksParts.length ? remarksParts.join(' | ') : null,
+        converted: converted || null,
+        documents_received: documents_received || null,
+        go_live_on_digihat: go_live_on_digihat || null,
+        go_live_date: go_live_date || null,
+        menu_pricing: menu_pricing || null,
+        last_contacted_on: last_contacted_on || null,
+        reason: reason || null,
       }
 
-      // Keep the latest occurrence for each restaurant_name
+      // dedupe by restaurant name before bulk upsert
       dedupedMap.set(restaurant_name.toLowerCase(), payload)
     }
 
@@ -200,6 +229,8 @@ export async function GET() {
       rows_prepared: payloads.length,
       rows_deduped: rows.length - payloads.length,
       rows_synced: payloads.length,
+      source_tab: 'Final List',
+      source_range: 'A2:T',
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error'
