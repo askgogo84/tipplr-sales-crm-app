@@ -51,7 +51,7 @@ export async function GET() {
 
     const sheets = google.sheets({
       version: 'v4',
-      auth,
+      auth: auth as any,
     })
 
     const response = await sheets.spreadsheets.values.get({
