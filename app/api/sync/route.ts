@@ -43,19 +43,15 @@ export async function GET() {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     )
 
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      },
+    const auth = new google.auth.JWT({
+      email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
       scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
     })
 
-    const client = await auth.getClient()
-
     const sheets = google.sheets({
       version: 'v4',
-      auth: client,
+      auth,
     })
 
     const response = await sheets.spreadsheets.values.get({
@@ -81,7 +77,8 @@ export async function GET() {
 
       if (!restaurant_name) continue
 
-      const lead_status = contacted.toLowerCase() === 'yes' ? 'Contacted' : 'Lead'
+      const lead_status =
+        contacted.toLowerCase() === 'yes' ? 'Contacted' : 'Lead'
 
       const remarksParts = [
         priority ? `Priority: ${priority}` : '',
@@ -119,11 +116,14 @@ export async function GET() {
       rows_fetched: rows.length,
       rows_synced: syncedCount,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : 'Unknown error'
+
     return Response.json(
       {
         success: false,
-        error: error.message,
+        error: message,
       },
       { status: 500 }
     )
