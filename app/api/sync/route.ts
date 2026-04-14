@@ -1,81 +1,118 @@
-import { google } from 'googleapis'
+import { JWT } from 'google-auth-library'
 import { createClient } from '@supabase/supabase-js'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    if (!process.env.GOOGLE_SHEET_ID) {
+    const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID
+    const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
+    const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY
+    const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!GOOGLE_SHEET_ID) {
       return Response.json(
         { success: false, error: 'Missing GOOGLE_SHEET_ID' },
         { status: 500 }
       )
     }
 
-    if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) {
+    if (!GOOGLE_SERVICE_ACCOUNT_EMAIL) {
       return Response.json(
         { success: false, error: 'Missing GOOGLE_SERVICE_ACCOUNT_EMAIL' },
         { status: 500 }
       )
     }
 
-    if (!process.env.GOOGLE_PRIVATE_KEY) {
+    if (!GOOGLE_PRIVATE_KEY) {
       return Response.json(
         { success: false, error: 'Missing GOOGLE_PRIVATE_KEY' },
         { status: 500 }
       )
     }
 
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    if (!SUPABASE_URL) {
       return Response.json(
         { success: false, error: 'Missing NEXT_PUBLIC_SUPABASE_URL' },
         { status: 500 }
       )
     }
 
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (!SUPABASE_SERVICE_ROLE_KEY) {
       return Response.json(
         { success: false, error: 'Missing SUPABASE_SERVICE_ROLE_KEY' },
         { status: 500 }
       )
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    )
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    const auth = new google.auth.JWT({
-      email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    const auth = new JWT({
+      email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      key: GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
       scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
     })
 
-    const sheets = google.sheets({
-      version: 'v4',
-      auth: auth as any,
-    })
+    const accessTokenResponse = await auth.authorize()
+    const accessToken = accessTokenResponse.access_token
 
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: "'Final List'!A2:K",
-    })
+    if (!accessToken) {
+      return Response.json(
+        { success: false, error: 'Failed to get Google access token' },
+        { status: 500 }
+      )
+    }
 
-    const rows = response.data.values || []
+    const range = encodeURIComponent("'Final List'!A2:K")
+    const googleRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_ID}/values/${range}`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: 'no-store',
+      }
+    )
+
+    if (!googleRes.ok) {
+      const errorText = await googleRes.text()
+      return Response.json(
+        {
+          success: false,
+          error: `Google Sheets API error: ${googleRes.status} ${errorText}`,
+        },
+        { status: 500 }
+      )
+    }
+
+    const sheetData = (await googleRes.json()) as {
+      values?: string[][]
+    }
+
+    const rows = sheetData.values || []
     let syncedCount = 0
+    const failedRows: Array<{ row: number; restaurant_name: string; error: string }> = []
 
-    for (const row of rows) {
-      const restaurant_name = row[0]?.trim() || ''
-      const priority = row[1]?.trim() || ''
-      const outlets = row[2]?.trim() || ''
-      const pos = row[3]?.trim() || ''
-      const brand_contact_person = row[4]?.trim() || ''
-      const designation = row[5]?.trim() || ''
-      const contact_no = row[6]?.trim() || ''
-      const zomato_page_number = row[7]?.trim() || ''
-      const contacted = row[8]?.trim() || ''
-      const tipplr_executive_name = row[9]?.trim() || ''
-      const approached_on = row[10]?.trim() || ''
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
 
-      if (!restaurant_name) continue
+      const restaurant_name = String(row[0] ?? '').trim()
+      const priority = String(row[1] ?? '').trim()
+      const outlets = String(row[2] ?? '').trim()
+      const pos = String(row[3] ?? '').trim()
+      const brand_contact_person = String(row[4] ?? '').trim()
+      const designation = String(row[5] ?? '').trim()
+      const contact_no = String(row[6] ?? '').trim()
+      const zomato_page_number = String(row[7] ?? '').trim()
+      const contacted = String(row[8] ?? '').trim()
+      const tipplr_executive_name = String(row[9] ?? '').trim()
+      const approached_on = String(row[10] ?? '').trim()
+
+      if (!restaurant_name) {
+        continue
+      }
 
       const lead_status =
         contacted.toLowerCase() === 'yes' ? 'Contacted' : 'Lead'
@@ -106,7 +143,13 @@ export async function GET() {
         .from('restaurants')
         .upsert(payload, { onConflict: 'restaurant_name' })
 
-      if (!error) {
+      if (error) {
+        failedRows.push({
+          row: i + 2,
+          restaurant_name,
+          error: error.message,
+        })
+      } else {
         syncedCount += 1
       }
     }
@@ -115,6 +158,7 @@ export async function GET() {
       success: true,
       rows_fetched: rows.length,
       rows_synced: syncedCount,
+      failed_rows: failedRows,
     })
   } catch (error: unknown) {
     const message =
