@@ -1,16 +1,96 @@
-PS C:\Users\gover\tipplr-crm-app> git add app/login/page.tsx
-PS C:\Users\gover\tipplr-crm-app> git commit -m "Switch login page to password auth"
-On branch main
-Your branch is up to date with 'origin/main'.
+'use client'
 
-Changes not staged for commit:
-  (use "git add <file>..." to update what will be committed)
-  (use "git restore <file>..." to discard changes in working directory)
-        modified:   app/layout.tsx
-        modified:   app/restaurants/page.tsx
-        modified:   app/team/page.tsx
+import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 
-no changes added to commit (use "git add" and/or "git commit -a")
-PS C:\Users\gover\tipplr-crm-app> git push
-Everything up-to-date
-PS C:\Users\gover\tipplr-crm-app> 
+export default function LoginPage() {
+  const supabase = createClient()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [message, setMessage] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setMessage('')
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      setMessage(error.message)
+      setLoading(false)
+      return
+    }
+
+    window.location.href = '/dashboard'
+  }
+
+  return (
+    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 420,
+          padding: 24,
+          border: '1px solid #ddd',
+          borderRadius: 12,
+        }}
+      >
+        <h1 style={{ marginBottom: 8 }}>Tipplr CRM Login</h1>
+        <p style={{ marginBottom: 20 }}>Sign in with your work email.</p>
+
+        <form onSubmit={handleLogin}>
+          <input
+            type="email"
+            placeholder="name@company.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            style={{
+              width: '100%',
+              padding: 12,
+              border: '1px solid #ccc',
+              borderRadius: 8,
+              marginBottom: 12,
+            }}
+          />
+
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            style={{
+              width: '100%',
+              padding: 12,
+              border: '1px solid #ccc',
+              borderRadius: 8,
+              marginBottom: 12,
+            }}
+          />
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: 12,
+              borderRadius: 8,
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            {loading ? 'Signing in...' : 'Login'}
+          </button>
+        </form>
+
+        {message ? <p style={{ marginTop: 12 }}>{message}</p> : null}
+      </div>
+    </main>
+  )
+}
