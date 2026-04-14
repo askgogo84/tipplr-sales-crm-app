@@ -54,8 +54,8 @@ export async function GET() {
       scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
     })
 
-    const accessTokenResponse = await auth.authorize()
-    const accessToken = accessTokenResponse.access_token
+    const tokenResponse = await auth.authorize()
+    const accessToken = tokenResponse.access_token
 
     if (!accessToken) {
       return Response.json(
@@ -65,10 +65,9 @@ export async function GET() {
     }
 
     const range = encodeURIComponent("'Final List'!A2:K")
-    const googleRes = await fetch(
+    const response = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_ID}/values/${range}`,
       {
-        method: 'GET',
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -76,22 +75,20 @@ export async function GET() {
       }
     )
 
-    if (!googleRes.ok) {
-      const errorText = await googleRes.text()
+    if (!response.ok) {
+      const errorText = await response.text()
       return Response.json(
         {
           success: false,
-          error: `Google Sheets API error: ${googleRes.status} ${errorText}`,
+          error: `Google Sheets API error: ${response.status} ${errorText}`,
         },
         { status: 500 }
       )
     }
 
-    const sheetData = (await googleRes.json()) as {
-      values?: string[][]
-    }
+    const data = (await response.json()) as { values?: unknown[][] }
+    const rows = data.values || []
 
-    const rows = sheetData.values || []
     let syncedCount = 0
     const failedRows: Array<{ row: number; restaurant_name: string; error: string }> = []
 
@@ -110,9 +107,7 @@ export async function GET() {
       const tipplr_executive_name = String(row[9] ?? '').trim()
       const approached_on = String(row[10] ?? '').trim()
 
-      if (!restaurant_name) {
-        continue
-      }
+      if (!restaurant_name) continue
 
       const lead_status =
         contacted.toLowerCase() === 'yes' ? 'Contacted' : 'Lead'
