@@ -1,59 +1,78 @@
-import { redirect } from 'next/navigation'
-import { createClient as createServerClient } from '@/lib/supabase/server'
-import { createClient as createPublicClient } from '@supabase/supabase-js'
-import RestaurantsTable from '@/components/restaurants-table'
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-type Restaurant = {
-  id?: number | string
-  restaurant_name: string
-  owner_name: string | null
-  phone: string | null
-  lead_status: string | null
-  assigned_to_name: string | null
-}
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
-export default async function RestaurantsPage() {
-  const authClient = await createServerClient()
-  const {
-    data: { user },
-  } = await authClient.auth.getUser()
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
 
-  if (!user) {
-    redirect('/login')
-  }
+    const page = Math.max(Number(searchParams.get('page') || '1'), 1)
+    const pageSize = Math.max(Number(searchParams.get('pageSize') || '50'), 1)
+    const search = (searchParams.get('search') || '').trim()
+    const status = (searchParams.get('status') || '').trim()
+    const assignedTo = (searchParams.get('assignedTo') || '').trim()
 
-  const supabase = createPublicClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
 
-  const [{ data: restaurants }, { data: profiles }] = await Promise.all([
-    supabase
+    let query = supabase
       .from('restaurants')
-      .select('id, restaurant_name, owner_name, phone, lead_status, assigned_to_name')
-      .order('restaurant_name', { ascending: true })
-      .limit(300),
-    supabase.from('profiles').select('full_name').order('full_name', { ascending: true }),
-  ])
+      .select('*', { count: 'exact' })
 
-  const assigneeOptions = [
-    'Unassigned',
-    ...((profiles || []).map((p) => p.full_name).filter(Boolean) as string[]),
-  ]
+    if (search) {
+      query = query.or(
+        [
+          `restaurant_name.ilike.%${search}%`,
+          `owner_name.ilike.%${search}%`,
+          `phone.ilike.%${search}%`,
+          `assigned_to_name.ilike.%${search}%`,
+        ].join(',')
+      )
+    }
 
-  return (
-    <main>
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ marginBottom: 8, fontSize: 30 }}>Restaurants CRM</h1>
-        <p style={{ opacity: 0.7, marginTop: 0 }}>
-          Search, filter, update status, assign leads, and open WhatsApp fast.
-        </p>
-      </div>
+    if (status) {
+      query = query.eq('lead_status', status)
+    }
 
-      <RestaurantsTable
-        initialData={(restaurants || []) as Restaurant[]}
-        assigneeOptions={assigneeOptions}
-      />
-    </main>
-  )
+    if (assignedTo) {
+      query = query.eq('assigned_to_name', assignedTo)
+    }
+
+    query = query
+      .order('updated_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false, nullsFirst: false })
+      .range(from, to)
+
+    const { data, error, count } = await query
+
+    if (error) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: data || [],
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+        totalPages: Math.max(Math.ceil((count || 0) / pageSize), 1),
+      },
+    })
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Unknown server error'
+
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    )
+  }
 }
