@@ -158,17 +158,22 @@ export async function GET() {
         remarks: remarksParts.length ? remarksParts.join(' | ') : null,
       }
 
-      const { error } = await withTimeout(
+      const upsertResult = await withTimeout(
         supabase.from('restaurants').upsert(payload, { onConflict: 'restaurant_name' }),
         10000,
         `Supabase upsert row ${i + 2}`
       )
 
-      if (error) {
+      const upsertError =
+        upsertResult && typeof upsertResult === 'object' && 'error' in upsertResult
+          ? upsertResult.error
+          : null
+
+      if (upsertError) {
         failedRows.push({
           row: i + 2,
           restaurant_name,
-          error: error.message,
+          error: upsertError.message,
         })
       } else {
         syncedCount += 1
