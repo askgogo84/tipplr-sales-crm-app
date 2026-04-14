@@ -23,25 +23,36 @@ export default function RestaurantsTable({
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [assigneeFilter, setAssigneeFilter] = useState('All')
+  const [myOnly, setMyOnly] = useState(false)
   const [isPending, startTransition] = useTransition()
+
+  // For now keep this hardcoded.
+  // Later we can make this dynamic from logged-in user profile.
+  const currentUser = 'Goverdhan'
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
+      const q = query.toLowerCase()
+
       const matchesQuery =
-        row.restaurant_name?.toLowerCase().includes(query.toLowerCase()) ||
-        row.owner_name?.toLowerCase().includes(query.toLowerCase()) ||
-        row.phone?.toLowerCase().includes(query.toLowerCase())
+        row.restaurant_name?.toLowerCase().includes(q) ||
+        row.owner_name?.toLowerCase().includes(q) ||
+        row.phone?.toLowerCase().includes(q)
 
       const matchesStatus =
         statusFilter === 'All' ? true : (row.lead_status || '') === statusFilter
 
       const normalizedAssignee = row.assigned_to_name || 'Unassigned'
+
       const matchesAssignee =
         assigneeFilter === 'All' ? true : normalizedAssignee === assigneeFilter
 
-      return matchesQuery && matchesStatus && matchesAssignee
+      const matchesMyLeads =
+        myOnly ? normalizedAssignee === currentUser : true
+
+      return matchesQuery && matchesStatus && matchesAssignee && matchesMyLeads
     })
-  }, [rows, query, statusFilter, assigneeFilter])
+  }, [rows, query, statusFilter, assigneeFilter, myOnly, currentUser])
 
   async function updateRow(
     id: number | string | undefined,
@@ -56,9 +67,16 @@ export default function RestaurantsTable({
         row.id === id
           ? {
               ...row,
-              ...(updates.lead_status !== undefined ? { lead_status: updates.lead_status } : {}),
+              ...(updates.lead_status !== undefined
+                ? { lead_status: updates.lead_status }
+                : {}),
               ...(updates.assigned_to_name !== undefined
-                ? { assigned_to_name: updates.assigned_to_name === 'Unassigned' ? null : updates.assigned_to_name }
+                ? {
+                    assigned_to_name:
+                      updates.assigned_to_name === 'Unassigned'
+                        ? null
+                        : updates.assigned_to_name,
+                  }
                 : {}),
             }
           : row
@@ -73,7 +91,9 @@ export default function RestaurantsTable({
           id,
           ...updates,
           assigned_to_name:
-            updates.assigned_to_name === 'Unassigned' ? '' : updates.assigned_to_name,
+            updates.assigned_to_name === 'Unassigned'
+              ? ''
+              : updates.assigned_to_name,
         }),
       })
 
@@ -91,9 +111,10 @@ export default function RestaurantsTable({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '2fr 1fr 1fr',
+          gridTemplateColumns: '2fr 1fr 1fr auto',
           gap: 12,
           marginBottom: 16,
+          alignItems: 'center',
         }}
       >
         <input
@@ -128,6 +149,23 @@ export default function RestaurantsTable({
             </option>
           ))}
         </select>
+
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            color: '#fff',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={myOnly}
+            onChange={(e) => setMyOnly(e.target.checked)}
+          />
+          Show only my leads
+        </label>
       </div>
 
       <div
@@ -180,7 +218,11 @@ export default function RestaurantsTable({
                   href={`https://wa.me/${String(row.phone).replace(/\D/g, '')}`}
                   target="_blank"
                   rel="noreferrer"
-                  style={{ color: '#8ab4ff', textDecoration: 'none' }}
+                  style={{
+                    color: '#25D366',
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                  }}
                 >
                   {row.phone}
                 </a>
@@ -195,7 +237,17 @@ export default function RestaurantsTable({
                 onChange={(e) =>
                   updateRow(row.id, { lead_status: e.target.value })
                 }
-                style={selectStyle}
+                style={{
+                  ...selectStyle,
+                  borderColor:
+                    row.lead_status === 'Contacted'
+                      ? '#facc15'
+                      : row.lead_status === 'Negotiation'
+                      ? '#3b82f6'
+                      : row.lead_status === 'Won'
+                      ? '#22c55e'
+                      : '#2a2a2a',
+                }}
                 disabled={isPending}
               >
                 {STATUS_OPTIONS.map((status) => (
