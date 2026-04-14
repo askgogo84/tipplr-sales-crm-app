@@ -1,12 +1,21 @@
-const { data: { user } } = await supabase.auth.getUser()
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 
-if (!user) redirect('/login')
+export default async function TeamPage() {
+  const supabase = await createClient()
 
-export default function TeamPage() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
   return (
-    <main style={{ padding: '24px', fontFamily: 'Arial, sans-serif' }}>
+    <main style={{ padding: 24 }}>
       <h1>Team</h1>
-      <p>Team page is being set up.</p>
+      <p>This page will show team members.</p>
     </main>
   )
 }
