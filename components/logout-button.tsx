@@ -10,5 +10,19 @@ export default function LogoutButton() {
     window.location.href = '/login'
   }
 
-  return <button onClick={logout}>Logout</button>
+  return (
+    <button
+      onClick={logout}
+      style={{
+        padding: '10px 14px',
+        borderRadius: 10,
+        border: '1px solid #2a2a2a',
+        background: '#111',
+        color: '#fff',
+        cursor: 'pointer',
+      }}
+    >
+      Logout
+    </button>
+  )
 }

@@ -1,3 +1,11 @@
+import type { Metadata } from 'next'
+import './globals.css'
+
+export const metadata: Metadata = {
+  title: 'Tipplr Sales CRM',
+  description: 'Internal sales CRM',
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -5,23 +13,41 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, fontFamily: 'Arial, sans-serif', background: '#0b0b0b', color: '#fff' }}>
+      <body
+        style={{
+          margin: 0,
+          fontFamily: 'Arial, sans-serif',
+          background: '#0b0b0b',
+          color: '#fff',
+        }}
+      >
         <nav
           style={{
             display: 'flex',
             gap: 20,
-            padding: '14px 20px',
-            borderBottom: '1px solid #222',
-            background: '#111',
+            alignItems: 'center',
+            padding: '16px 20px',
+            borderBottom: '1px solid #1f1f1f',
+            background: '#101010',
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
           }}
         >
-          <a href="/dashboard" style={{ color: '#fff', textDecoration: 'none' }}>Dashboard</a>
-          <a href="/restaurants" style={{ color: '#fff', textDecoration: 'none' }}>Restaurants</a>
-          <a href="/team" style={{ color: '#fff', textDecoration: 'none' }}>Team</a>
+          <div style={{ fontWeight: 700 }}>Tipplr Sales CRM</div>
+          <a href="/dashboard" style={navLink}>Dashboard</a>
+          <a href="/restaurants" style={navLink}>Restaurants</a>
+          <a href="/team" style={navLink}>Team</a>
         </nav>
 
-        <div style={{ padding: 20 }}>{children}</div>
+        <div style={{ padding: 24 }}>{children}</div>
       </body>
     </html>
   )
+}
+
+const navLink: React.CSSProperties = {
+  color: '#fff',
+  textDecoration: 'none',
+  opacity: 0.85,
 }

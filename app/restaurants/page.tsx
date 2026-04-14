@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createClient as createPublicClient } from '@supabase/supabase-js'
+import RestaurantsTable from '@/components/restaurants-table'
 
 type Restaurant = {
   id?: number | string
@@ -29,60 +30,25 @@ export default async function RestaurantsPage() {
   const { data, error } = await supabase
     .from('restaurants')
     .select('id, restaurant_name, owner_name, phone, lead_status, assigned_to_name')
-    .limit(100)
+    .order('restaurant_name', { ascending: true })
+    .limit(300)
 
   if (error) {
-    return <main>Error loading restaurants</main>
+    return <main style={{ padding: 24 }}>Error loading restaurants</main>
   }
 
   const restaurants = (data || []) as Restaurant[]
 
   return (
     <main>
-      <h1 style={{ marginBottom: 16 }}>Restaurants ({restaurants.length})</h1>
-
-      <div style={{ overflowX: 'auto' }}>
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            background: '#111',
-            border: '1px solid #222',
-          }}
-        >
-          <thead>
-            <tr style={{ background: '#1a1a1a' }}>
-              <th style={th}>Restaurant</th>
-              <th style={th}>Owner</th>
-              <th style={th}>Phone</th>
-              <th style={th}>Status</th>
-              <th style={th}>Assigned To</th>
-            </tr>
-          </thead>
-          <tbody>
-            {restaurants.map((r) => (
-              <tr key={r.id ?? r.restaurant_name}>
-                <td style={td}>{r.restaurant_name}</td>
-                <td style={td}>{r.owner_name || '-'}</td>
-                <td style={td}>{r.phone || '-'}</td>
-                <td style={td}>{r.lead_status || '-'}</td>
-                <td style={td}>{r.assigned_to_name || '-'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ marginBottom: 8 }}>Restaurants CRM</h1>
+        <p style={{ opacity: 0.7 }}>
+          Search, filter, update status, and assign leads.
+        </p>
       </div>
+
+      <RestaurantsTable initialData={restaurants} />
     </main>
   )
-}
-
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: 12,
-  borderBottom: '1px solid #222',
-}
-
-const td: React.CSSProperties = {
-  padding: 12,
-  borderBottom: '1px solid #1b1b1b',
 }

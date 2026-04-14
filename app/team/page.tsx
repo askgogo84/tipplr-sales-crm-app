@@ -1,3 +1,7 @@
+const { data: { user } } = await supabase.auth.getUser()
+
+if (!user) redirect('/login')
+
 export default function TeamPage() {
   return (
     <main style={{ padding: '24px', fontFamily: 'Arial, sans-serif' }}>
