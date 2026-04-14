@@ -16,31 +16,37 @@ export default function RootLayout({
       <body
         style={{
           margin: 0,
-          fontFamily: 'Arial, sans-serif',
-          background: '#0b0b0b',
+          fontFamily: 'Inter, Arial, sans-serif',
+          background: '#0a0a0a',
           color: '#fff',
         }}
       >
-        <nav
-          style={{
-            display: 'flex',
-            gap: 20,
-            alignItems: 'center',
-            padding: '16px 20px',
-            borderBottom: '1px solid #1f1f1f',
-            background: '#101010',
-            position: 'sticky',
-            top: 0,
-            zIndex: 10,
-          }}
-        >
-          <div style={{ fontWeight: 700 }}>Tipplr Sales CRM</div>
-          <a href="/dashboard" style={navLink}>Dashboard</a>
-          <a href="/restaurants" style={navLink}>Restaurants</a>
-          <a href="/team" style={navLink}>Team</a>
-        </nav>
+        <div style={{ display: 'flex', minHeight: '100vh' }}>
+          <aside
+            style={{
+              width: 240,
+              background: '#101010',
+              borderRight: '1px solid #1f1f1f',
+              padding: 20,
+              position: 'sticky',
+              top: 0,
+              height: '100vh',
+              boxSizing: 'border-box',
+            }}
+          >
+            <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 26 }}>
+              Tipplr CRM
+            </div>
 
-        <div style={{ padding: 24 }}>{children}</div>
+            <div style={{ display: 'grid', gap: 10 }}>
+              <a href="/dashboard" style={navLink}>Dashboard</a>
+              <a href="/restaurants" style={navLink}>Restaurants</a>
+              <a href="/team" style={navLink}>Team</a>
+            </div>
+          </aside>
+
+          <main style={{ flex: 1, padding: 28 }}>{children}</main>
+        </div>
       </body>
     </html>
   )
@@ -49,5 +55,8 @@ export default function RootLayout({
 const navLink: React.CSSProperties = {
   color: '#fff',
   textDecoration: 'none',
-  opacity: 0.85,
+  padding: '12px 14px',
+  borderRadius: 12,
+  background: '#161616',
+  border: '1px solid #232323',
 }

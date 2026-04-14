@@ -15,11 +15,12 @@ export default function LogoutButton() {
       onClick={logout}
       style={{
         padding: '10px 14px',
-        borderRadius: 10,
+        borderRadius: 12,
         border: '1px solid #2a2a2a',
-        background: '#111',
+        background: '#141414',
         color: '#fff',
         cursor: 'pointer',
+        fontWeight: 600,
       }}
     >
       Logout

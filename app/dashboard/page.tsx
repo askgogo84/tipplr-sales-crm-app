@@ -37,8 +37,8 @@ export default async function DashboardPage() {
         }}
       >
         <div>
-          <h1 style={{ margin: 0 }}>Dashboard</h1>
-          <p style={{ marginTop: 8, opacity: 0.75 }}>Welcome, {user.email}</p>
+          <h1 style={{ margin: 0, fontSize: 30 }}>Dashboard</h1>
+          <p style={{ marginTop: 8, opacity: 0.72 }}>Welcome, {user.email}</p>
         </div>
         <LogoutButton />
       </div>
@@ -64,14 +64,15 @@ function Card({ title, value }: { title: string; value: string }) {
   return (
     <div
       style={{
-        background: '#111',
+        background: 'linear-gradient(180deg, #131313 0%, #0d0d0d 100%)',
         border: '1px solid #222',
-        borderRadius: 16,
+        borderRadius: 18,
         padding: 18,
+        boxShadow: '0 8px 30px rgba(0,0,0,0.25)',
       }}
     >
       <div style={{ opacity: 0.65, marginBottom: 8 }}>{title}</div>
-      <div style={{ fontSize: 30, fontWeight: 700 }}>{value}</div>
+      <div style={{ fontSize: 30, fontWeight: 800 }}>{value}</div>
     </div>
   )
 }

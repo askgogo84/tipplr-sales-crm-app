@@ -12,12 +12,13 @@ type Restaurant = {
 }
 
 const STATUS_OPTIONS = ['Lead', 'Contacted', 'Negotiation', 'Won', 'Lost']
-const ASSIGNEE_OPTIONS = ['Unassigned', 'Goverdhan', 'Theresa', 'Manager A', 'Owner B']
 
 export default function RestaurantsTable({
   initialData,
+  assigneeOptions,
 }: {
   initialData: Restaurant[]
+  assigneeOptions: string[]
 }) {
   const [rows, setRows] = useState(initialData)
   const [query, setQuery] = useState('')
@@ -26,8 +27,6 @@ export default function RestaurantsTable({
   const [myOnly, setMyOnly] = useState(false)
   const [isPending, startTransition] = useTransition()
 
-  // For now keep this hardcoded.
-  // Later we can make this dynamic from logged-in user profile.
   const currentUser = 'Goverdhan'
 
   const filteredRows = useMemo(() => {
@@ -52,7 +51,7 @@ export default function RestaurantsTable({
 
       return matchesQuery && matchesStatus && matchesAssignee && matchesMyLeads
     })
-  }, [rows, query, statusFilter, assigneeFilter, myOnly, currentUser])
+  }, [rows, query, statusFilter, assigneeFilter, myOnly])
 
   async function updateRow(
     id: number | string | undefined,
@@ -113,7 +112,7 @@ export default function RestaurantsTable({
           display: 'grid',
           gridTemplateColumns: '2fr 1fr 1fr auto',
           gap: 12,
-          marginBottom: 16,
+          marginBottom: 18,
           alignItems: 'center',
         }}
       >
@@ -143,7 +142,7 @@ export default function RestaurantsTable({
           style={inputStyle}
         >
           <option value="All">All Assignees</option>
-          {ASSIGNEE_OPTIONS.map((name) => (
+          {assigneeOptions.map((name) => (
             <option key={name} value={name}>
               {name}
             </option>
@@ -157,6 +156,7 @@ export default function RestaurantsTable({
             gap: 8,
             color: '#fff',
             whiteSpace: 'nowrap',
+            fontSize: 14,
           }}
         >
           <input
@@ -170,21 +170,23 @@ export default function RestaurantsTable({
 
       <div
         style={{
-          background: '#111',
+          background: 'linear-gradient(180deg, #131313 0%, #0d0d0d 100%)',
           border: '1px solid #222',
-          borderRadius: 16,
+          borderRadius: 18,
           overflow: 'hidden',
+          boxShadow: '0 8px 30px rgba(0,0,0,0.25)',
         }}
       >
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '2.2fr 1.3fr 1.3fr 1fr 1.2fr',
+            gridTemplateColumns: '2.2fr 1.2fr 1.2fr 1fr 1.2fr',
             gap: 12,
             padding: 14,
-            background: '#161616',
+            background: '#171717',
             borderBottom: '1px solid #222',
-            fontWeight: 600,
+            fontWeight: 700,
+            fontSize: 14,
           }}
         >
           <div>Restaurant</div>
@@ -199,7 +201,7 @@ export default function RestaurantsTable({
             key={row.id ?? row.restaurant_name}
             style={{
               display: 'grid',
-              gridTemplateColumns: '2.2fr 1.3fr 1.3fr 1fr 1.2fr',
+              gridTemplateColumns: '2.2fr 1.2fr 1.2fr 1fr 1.2fr',
               gap: 12,
               padding: 14,
               borderBottom: '1px solid #1c1c1c',
@@ -207,10 +209,10 @@ export default function RestaurantsTable({
             }}
           >
             <div>
-              <div style={{ fontWeight: 600 }}>{row.restaurant_name}</div>
+              <div style={{ fontWeight: 700 }}>{row.restaurant_name}</div>
             </div>
 
-            <div>{row.owner_name || '-'}</div>
+            <div style={{ opacity: 0.85 }}>{row.owner_name || '-'}</div>
 
             <div>
               {row.phone ? (
@@ -234,9 +236,7 @@ export default function RestaurantsTable({
             <div>
               <select
                 value={row.lead_status || 'Lead'}
-                onChange={(e) =>
-                  updateRow(row.id, { lead_status: e.target.value })
-                }
+                onChange={(e) => updateRow(row.id, { lead_status: e.target.value })}
                 style={{
                   ...selectStyle,
                   borderColor:
@@ -246,6 +246,8 @@ export default function RestaurantsTable({
                       ? '#3b82f6'
                       : row.lead_status === 'Won'
                       ? '#22c55e'
+                      : row.lead_status === 'Lost'
+                      ? '#ef4444'
                       : '#2a2a2a',
                 }}
                 disabled={isPending}
@@ -267,7 +269,7 @@ export default function RestaurantsTable({
                 style={selectStyle}
                 disabled={isPending}
               >
-                {ASSIGNEE_OPTIONS.map((name) => (
+                {assigneeOptions.map((name) => (
                   <option key={name} value={name}>
                     {name}
                   </option>
@@ -288,7 +290,7 @@ export default function RestaurantsTable({
 const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '12px 14px',
-  borderRadius: 10,
+  borderRadius: 12,
   border: '1px solid #2a2a2a',
   background: '#111',
   color: '#fff',
@@ -298,7 +300,7 @@ const inputStyle: React.CSSProperties = {
 const selectStyle: React.CSSProperties = {
   width: '100%',
   padding: '10px 12px',
-  borderRadius: 10,
+  borderRadius: 12,
   border: '1px solid #2a2a2a',
   background: '#111',
   color: '#fff',
