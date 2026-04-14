@@ -30,6 +30,7 @@ export default function TeamPage() {
     const { data, error } = await supabase
       .from('users')
       .select('*')
+      .order('created_at', { ascending: false })
 
     if (error) {
       setError(error.message)
@@ -42,11 +43,11 @@ export default function TeamPage() {
   }
 
   async function addUser() {
-    if (!name) return
+    if (!name.trim()) return
 
     const { error } = await supabase.from('users').insert([
       {
-        name,
+        name: name.trim(),
         role,
       },
     ])
@@ -57,6 +58,7 @@ export default function TeamPage() {
     }
 
     setName('')
+    setRole('Sales')
     loadUsers()
   }
 
@@ -67,18 +69,21 @@ export default function TeamPage() {
         background: '#0b0b0b',
         color: '#fff',
         padding: '24px',
+        fontFamily: 'Arial, sans-serif',
       }}
     >
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-        {/* HEADER */}
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             marginBottom: '24px',
+            gap: '16px',
+            flexWrap: 'wrap',
+            alignItems: 'center',
           }}
         >
-          <h1>Team Management</h1>
+          <h1 style={{ margin: 0 }}>Team Management</h1>
 
           <Link
             href="/"
@@ -94,7 +99,21 @@ export default function TeamPage() {
           </Link>
         </div>
 
-        {/* ADD USER */}
+        {error && (
+          <div
+            style={{
+              marginBottom: '16px',
+              padding: '12px',
+              borderRadius: '8px',
+              background: '#2a1111',
+              color: '#ffb3b3',
+              border: '1px solid #5a2323',
+            }}
+          >
+            {error}
+          </div>
+        )}
+
         <div
           style={{
             background: '#161616',
@@ -105,7 +124,7 @@ export default function TeamPage() {
         >
           <h3>Add Team Member</h3>
 
-          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
             <input
               placeholder="Name"
               value={name}
@@ -118,18 +137,17 @@ export default function TeamPage() {
               onChange={(e) => setRole(e.target.value)}
               style={inputStyle}
             >
-              <option>Sales</option>
-              <option>Manager</option>
-              <option>Admin</option>
+              <option value="Sales">Sales</option>
+              <option value="Manager">Manager</option>
+              <option value="Admin">Admin</option>
             </select>
 
-            <button onClick={addUser} style={buttonStyle}>
+            <button onClick={addUser} style={buttonStyle} type="button">
               Add
             </button>
           </div>
         </div>
 
-        {/* USERS LIST */}
         <div
           style={{
             background: '#161616',
@@ -141,6 +159,8 @@ export default function TeamPage() {
 
           {loading && <p>Loading...</p>}
 
+          {!loading && users.length === 0 && <p>No team members found.</p>}
+
           {!loading &&
             users.map((user) => (
               <div
@@ -150,7 +170,7 @@ export default function TeamPage() {
                   borderBottom: '1px solid #2a2a2a',
                 }}
               >
-                <strong>{user.name}</strong> — {user.role}
+                <strong>{user.name}</strong> — {user.role || 'Sales'}
               </div>
             ))}
         </div>
@@ -159,7 +179,7 @@ export default function TeamPage() {
   )
 }
 
-const inputStyle = {
+const inputStyle: React.CSSProperties = {
   padding: '10px',
   borderRadius: '8px',
   border: '1px solid #333',
@@ -167,7 +187,7 @@ const inputStyle = {
   color: '#fff',
 }
 
-const buttonStyle = {
+const buttonStyle: React.CSSProperties = {
   padding: '10px 14px',
   background: '#22c55e',
   border: 'none',

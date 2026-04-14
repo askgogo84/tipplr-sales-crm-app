@@ -18,6 +18,7 @@ type Restaurant = {
   city: string | null
   lead_status: string | null
   assigned_user_id: string | null
+  assigned_to_name?: string | null
   remarks: string | null
 }
 
@@ -69,10 +70,7 @@ export default function RestaurantsPage() {
     setLoading(false)
   }
 
-  async function updateRestaurant(
-    id: string,
-    updates: Partial<Restaurant>
-  ) {
+  async function updateRestaurant(id: string, updates: Partial<Restaurant>) {
     await supabase.from('restaurants').update(updates).eq('id', id)
     loadData()
   }
@@ -83,7 +81,7 @@ export default function RestaurantsPage() {
         <div style={headerStyle}>
           <h1 style={{ margin: 0 }}>Restaurants CRM</h1>
 
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <Link href="/" style={buttonBlue}>
               Back to Dashboard
             </Link>
@@ -135,11 +133,15 @@ export default function RestaurantsPage() {
                   <Td>
                     <select
                       value={r.assigned_user_id || ''}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const selectedId = e.target.value || null
+                        const selectedUser = users.find((u) => u.id === selectedId)
+
                         updateRestaurant(r.id, {
-                          assigned_user_id: e.target.value || null,
+                          assigned_user_id: selectedId,
+                          assigned_to_name: selectedUser?.name || null,
                         })
-                      }
+                      }}
                       style={inputStyle}
                     >
                       <option value="">Unassigned</option>
@@ -177,8 +179,6 @@ export default function RestaurantsPage() {
     </main>
   )
 }
-
-/* styles */
 
 const mainStyle: React.CSSProperties = {
   minHeight: '100vh',

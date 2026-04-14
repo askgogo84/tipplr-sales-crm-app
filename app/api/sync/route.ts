@@ -64,7 +64,6 @@ export async function GET() {
     })
 
     const rows = response.data.values || []
-
     let syncedCount = 0
 
     for (const row of rows) {
