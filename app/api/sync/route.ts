@@ -39,6 +39,7 @@ type RestaurantPayload = {
   menu_pricing?: string | null
   last_contacted_on?: string | null
   reason?: string | null
+  source_row_number?: number
 }
 
 export async function GET() {
@@ -102,7 +103,6 @@ export async function GET() {
       )
     }
 
-    // Final List tab, columns A to T
     const range = encodeURIComponent("'Final List'!A2:T")
 
     const googleRes = await withTimeout(
@@ -130,7 +130,10 @@ export async function GET() {
 
     const dedupedMap = new Map<string, RestaurantPayload>()
 
-    for (const row of rows) {
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index]
+      const source_row_number = index + 2
+
       const restaurant_name = String(row[0] ?? '').trim()          // A
       const priority = String(row[1] ?? '').trim()                 // B
       const outlets = String(row[2] ?? '').trim()                  // C
@@ -149,7 +152,6 @@ export async function GET() {
       const go_live_on_digihat = String(row[14] ?? '').trim()      // O
       const go_live_date = String(row[15] ?? '').trim()            // P
       const menu_pricing = String(row[16] ?? '').trim()            // Q
-      // row[17] = R, currently unused
       const last_contacted_on = String(row[18] ?? '').trim()       // S
       const reason = String(row[19] ?? '').trim()                  // T
 
@@ -181,9 +183,9 @@ export async function GET() {
         menu_pricing: menu_pricing || null,
         last_contacted_on: last_contacted_on || null,
         reason: reason || null,
+        source_row_number,
       }
 
-      // dedupe by restaurant name before bulk upsert
       dedupedMap.set(restaurant_name.toLowerCase(), payload)
     }
 
