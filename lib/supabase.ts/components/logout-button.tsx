@@ -5,10 +5,10 @@ import { createClient } from '@/lib/supabase/client'
 export default function LogoutButton() {
   const supabase = createClient()
 
-  async function handleLogout() {
+  async function logout() {
     await supabase.auth.signOut()
     window.location.href = '/login'
   }
 
-  return <button onClick={handleLogout}>Logout</button>
+  return <button onClick={logout}>Logout</button>
 }
