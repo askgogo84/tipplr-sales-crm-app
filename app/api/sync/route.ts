@@ -114,7 +114,7 @@ export async function GET() {
     const data = (await googleRes.json()) as { values?: string[][] }
     const rows = data.values || []
 
-    const payloads: RestaurantPayload[] = []
+    const dedupedMap = new Map<string, RestaurantPayload>()
 
     for (const row of rows) {
       const restaurant_name = String(row[0] ?? '').trim()
@@ -143,7 +143,7 @@ export async function GET() {
         approached_on ? `Approached On: ${approached_on}` : '',
       ].filter(Boolean)
 
-      payloads.push({
+      const payload: RestaurantPayload = {
         restaurant_name,
         owner_name: brand_contact_person || null,
         phone: contact_no || null,
@@ -152,14 +152,20 @@ export async function GET() {
         lead_status,
         assigned_to_name: tipplr_executive_name || null,
         remarks: remarksParts.length ? remarksParts.join(' | ') : null,
-      })
+      }
+
+      // Keep the latest occurrence for each restaurant_name
+      dedupedMap.set(restaurant_name.toLowerCase(), payload)
     }
+
+    const payloads = Array.from(dedupedMap.values())
 
     if (payloads.length === 0) {
       return Response.json({
         success: true,
         rows_fetched: rows.length,
         rows_prepared: 0,
+        rows_deduped: 0,
         rows_synced: 0,
       })
     }
@@ -192,6 +198,7 @@ export async function GET() {
       success: true,
       rows_fetched: rows.length,
       rows_prepared: payloads.length,
+      rows_deduped: rows.length - payloads.length,
       rows_synced: payloads.length,
     })
   } catch (error: unknown) {
