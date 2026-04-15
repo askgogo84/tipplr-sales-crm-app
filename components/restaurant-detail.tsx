@@ -1,512 +1,406 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { showToast, timeAgo, formatDate } from '@/components/ui'
+import { useEffect, useMemo, useState } from 'react'
+
+type Executive = {
+  id: string
+  full_name: string
+}
 
 type Restaurant = {
   id: string
-  restaurant_name: string | null
-  brand_name: string | null
+  restaurant_name: string
   owner_name: string | null
   phone: string | null
-  alternate_phone: string | null
-  email: string | null
-  area: string | null
-  zone: string | null
   city: string | null
-  address: string | null
-  restaurant_type: string | null
-  category: string | null
-  source: string | null
+  area: string | null
   lead_status: string | null
   assigned_to_name: string | null
-  follow_up_date: string | null
-  last_contacted_at: string | null
-  onboarded_date: string | null
-  commission_percent: number | null
-  discount_offer: string | null
-  fssai_number: string | null
-  menu_status: string | null
-  contract_status: string | null
-  kyc_status: string | null
-  listing_status: string | null
-  priority: string | null
   remarks: string | null
-  created_at: string | null
-  updated_at: string | null
-  converted: boolean | null
-  documents_received: boolean | null
-  go_live_on_digilist: boolean | null
-  go_live_date: string | null
-  menu_pricing: string | null
-  reason: string | null
-  [key: string]: any
 }
 
-type Note = { id: number; note: string; created_by: string; created_at: string }
-type Activity = { id: number; action_type: string; action_details: string; performed_by: string; created_at: string }
-type Doc = { id: number; file_name: string; uploaded_by: string; created_at: string }
-
-const TABS = ['Overview', 'Details', 'Notes', 'Activity', 'Documents'] as const
-type Tab = (typeof TABS)[number]
-
-function statusPill(status: string | null) {
-  if (!status) return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
-  const s = status.toLowerCase().replace(/\s+/g, '-')
-  const map: Record<string, { bg: string; color: string }> = {
-    lead: { bg: '#E8E4DE', color: '#6B6560' },
-    contacted: { bg: '#DBEAFE', color: '#1E40AF' },
-    interested: { bg: '#FEF3C7', color: '#92400E' },
-    negotiation: { bg: '#EDE9FE', color: '#5B21B6' },
-    won: { bg: '#D1FAE5', color: '#065F46' },
-    lost: { bg: '#FEE2E2', color: '#991B1B' },
-    converted: { bg: '#CFFAFE', color: '#155E75' },
-    'not-interested': { bg: '#F3F4F6', color: '#6B7280' },
-  }
-  const c = map[s] || { bg: '#E8E4DE', color: '#6B6560' }
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6,
-      padding: '4px 11px', borderRadius: 999,
-      background: c.bg, color: c.color,
-      fontSize: 12, fontWeight: 600,
-    }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.color }} />
-      {status}
-    </span>
-  )
+type ActivityItem = {
+  id: string
+  action_type: string
+  field_name: string | null
+  old_value: string | null
+  new_value: string | null
+  created_at: string
+  actor_name: string | null
 }
 
-function priorityPill(p: string | null) {
-  if (!p) return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
-  const map: Record<string, { bg: string; color: string }> = {
-    high: { bg: '#FEE2E2', color: '#991B1B' },
-    medium: { bg: '#FEF3C7', color: '#92400E' },
-    low: { bg: '#D1FAE5', color: '#065F46' },
-  }
-  const c = map[p.toLowerCase()] || { bg: '#F3F4F6', color: '#6B7280' }
-  return (
-    <span style={{
-      display: 'inline-flex', padding: '4px 11px', borderRadius: 999,
-      background: c.bg, color: c.color, fontSize: 12, fontWeight: 600,
-    }}>
-      {p}
-    </span>
-  )
-}
-
-export default function RestaurantDetail({
-  restaurant,
-  onClose,
-  assigneeOptions,
-}: {
-  restaurant: Restaurant
+type Props = {
+  restaurant: Restaurant | null
+  open: boolean
   onClose: () => void
-  assigneeOptions: string[]
-}) {
-  const [tab, setTab] = useState<Tab>('Overview')
-  const [notes, setNotes] = useState<Note[]>([])
-  const [activities, setActivities] = useState<Activity[]>([])
-  const [docs, setDocs] = useState<Doc[]>([])
-  const [newNote, setNewNote] = useState('')
-  const r = restaurant
+  executives: Executive[]
+  onSaved?: () => void
+}
 
-  // Escape key closes
+function getStatusClasses(status: string | null) {
+  switch ((status || '').toLowerCase()) {
+    case 'lead':
+      return 'bg-slate-100 text-slate-700 border-slate-200'
+    case 'contacted':
+      return 'bg-blue-100 text-blue-700 border-blue-200'
+    case 'qualified':
+      return 'bg-violet-100 text-violet-700 border-violet-200'
+    case 'proposal sent':
+      return 'bg-amber-100 text-amber-700 border-amber-200'
+    case 'won':
+    case 'converted':
+      return 'bg-emerald-100 text-emerald-700 border-emerald-200'
+    case 'lost':
+      return 'bg-rose-100 text-rose-700 border-rose-200'
+    default:
+      return 'bg-gray-100 text-gray-700 border-gray-200'
+  }
+}
+
+export default function RestaurantDetailPanel({
+  restaurant,
+  open,
+  onClose,
+  executives,
+  onSaved,
+}: Props) {
+  const [form, setForm] = useState<Restaurant | null>(restaurant)
+  const [saving, setSaving] = useState(false)
+  const [activities, setActivities] = useState<ActivityItem[]>([])
+  const [loadingActivities, setLoadingActivities] = useState(false)
+
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
+    setForm(restaurant)
+  }, [restaurant])
 
-  // Fetch tab data
   useEffect(() => {
-    if (tab === 'Notes') fetchNotes()
-    if (tab === 'Activity') fetchActivity()
-    if (tab === 'Documents') fetchDocs()
-  }, [tab, r.id])
+    if (restaurant?.id && open) {
+      loadActivities(restaurant.id)
+    }
+  }, [restaurant?.id, open])
 
-  async function fetchNotes() {
+  async function loadActivities(restaurantId: string) {
     try {
-      const res = await fetch(`/api/restaurants/${r.id}/notes`)
-      if (res.ok) { const d = await res.json(); setNotes(d.data || []) }
-    } catch {}
-  }
-
-  async function fetchActivity() {
-    try {
-      const res = await fetch(`/api/restaurants/${r.id}/activity`)
-      if (res.ok) { const d = await res.json(); setActivities(d.data || []) }
-    } catch {}
-  }
-
-  async function fetchDocs() {
-    try {
-      const res = await fetch(`/api/restaurants/${r.id}/documents`)
-      if (res.ok) { const d = await res.json(); setDocs(d.data || []) }
-    } catch {}
-  }
-
-  async function addNote() {
-    if (!newNote.trim()) return
-    try {
-      await fetch(`/api/restaurants/${r.id}/notes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ note: newNote.trim(), created_by: 'Goverdhan' }),
+      setLoadingActivities(true)
+      const res = await fetch(`/api/restaurants/${restaurantId}/activity`, {
+        cache: 'no-store',
       })
-      setNewNote('')
-      fetchNotes()
-      showToast('Note added')
-    } catch {
-      // If API doesn't exist yet, add locally
-      setNotes(prev => [{ id: Date.now(), note: newNote.trim(), created_by: 'Goverdhan', created_at: new Date().toISOString() }, ...prev])
-      setNewNote('')
-      showToast('Note saved locally')
+      const data = await res.json()
+      setActivities(data.activities || [])
+    } catch (error) {
+      console.error('Failed to load activities', error)
+      setActivities([])
+    } finally {
+      setLoadingActivities(false)
     }
   }
 
-  const labelStyle: React.CSSProperties = {
-    fontSize: 11.5, fontWeight: 600,
-    textTransform: 'uppercase', letterSpacing: '0.05em',
-    color: 'var(--text-tertiary)', marginBottom: 5,
-  }
+  const hasChanges = useMemo(() => {
+    if (!restaurant || !form) return false
 
-  const valStyle: React.CSSProperties = {
-    fontSize: 14, color: 'var(--text-primary)', fontWeight: 450,
-  }
-
-  const empty = <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>—</span>
-
-  const divider = <div style={{ gridColumn: '1 / -1', height: 1, background: 'var(--border-light)', margin: '6px 0' }} />
-
-  const sectionHead = (text: string) => (
-    <div style={{
-      gridColumn: '1 / -1', fontFamily: 'var(--font-display)',
-      fontSize: 18, fontStyle: 'italic', color: 'var(--text-primary)', paddingTop: 8,
-    }}>{text}</div>
-  )
-
-  const field = (label: string, value: React.ReactNode) => (
-    <div>
-      <div style={labelStyle}>{label}</div>
-      <div style={valStyle}>{value || empty}</div>
-    </div>
-  )
-
-  const waLink = (phone: string | null) => {
-    if (!phone) return empty
     return (
-      <a href={`https://wa.me/91${phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
-        style={{ color: '#25D366', fontWeight: 550, textDecoration: 'none' }}>
-        📱 {phone}
-      </a>
+      restaurant.restaurant_name !== form.restaurant_name ||
+      restaurant.owner_name !== form.owner_name ||
+      restaurant.phone !== form.phone ||
+      restaurant.city !== form.city ||
+      restaurant.area !== form.area ||
+      restaurant.lead_status !== form.lead_status ||
+      restaurant.assigned_to_name !== form.assigned_to_name ||
+      restaurant.remarks !== form.remarks
     )
+  }, [restaurant, form])
+
+  async function handleSave() {
+    if (!form || !restaurant?.id) return
+
+    try {
+      setSaving(true)
+
+      const res = await fetch(`/api/restaurants/${restaurant.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          restaurant_name: form.restaurant_name,
+          owner_name: form.owner_name,
+          phone: form.phone,
+          city: form.city,
+          area: form.area,
+          lead_status: form.lead_status,
+          assigned_to_name: form.assigned_to_name,
+          remarks: form.remarks,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data.error || 'Failed to save restaurant')
+        return
+      }
+
+      setForm(data.restaurant)
+      await loadActivities(restaurant.id)
+      onSaved?.()
+      alert('Restaurant updated successfully')
+    } catch (error) {
+      console.error(error)
+      alert('Something went wrong while saving')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const activityIcon: Record<string, { cls: string; emoji: string }> = {
-    status_change: { cls: 'activity-icon-status', emoji: '↻' },
-    note_added: { cls: 'activity-icon-note', emoji: '✎' },
-    assigned: { cls: 'activity-icon-assign', emoji: '→' },
-    call_made: { cls: 'activity-icon-call', emoji: '✆' },
-    document_uploaded: { cls: 'activity-icon-doc', emoji: '📎' },
-  }
+  if (!open || !form) return null
 
   return (
-    <>
-      {/* Overlay */}
-      <div onClick={onClose} style={{
-        position: 'fixed', inset: 0, background: 'var(--bg-overlay)',
-        zIndex: 500, backdropFilter: 'blur(4px)',
-        animation: 'fadeIn 0.2s ease both',
-      }} />
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Panel */}
-      <div style={{
-        position: 'fixed', top: 0, right: 0,
-        width: 680, maxWidth: '92vw', height: '100vh',
-        background: 'var(--bg-card)', zIndex: 501,
-        boxShadow: 'var(--shadow-xl)',
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) both',
-      }}>
-        {/* Header */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '20px 28px', borderBottom: '1px solid var(--border)', flexShrink: 0,
-        }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontStyle: 'italic' }}>
-            {r.restaurant_name || 'Restaurant'}
-          </div>
-          <button onClick={onClose} style={{
-            width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 10, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-secondary)',
-          }}>✕</button>
-        </div>
-
-        {/* Tabs */}
-        <div style={{
-          display: 'flex', borderBottom: '1px solid var(--border)',
-          padding: '0 28px', background: 'var(--bg-table-header)', overflowX: 'auto',
-        }}>
-          {TABS.map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{
-              padding: '14px 18px', fontSize: 13,
-              fontWeight: tab === t ? 600 : 500,
-              color: tab === t ? 'var(--accent)' : 'var(--text-secondary)',
-              cursor: 'pointer', border: 'none', background: 'none',
-              borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
-              fontFamily: 'var(--font-body)', whiteSpace: 'nowrap',
-            }}>{t}</button>
-          ))}
-        </div>
-
-        {/* Tab Content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
-
-          {/* ═══ OVERVIEW ═══ */}
-          {tab === 'Overview' && (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px 28px' }}>
-                {field('Status', statusPill(r.lead_status))}
-                {field('Priority', priorityPill(r.priority))}
-                {field('Assigned To', r.assigned_to_name)}
-                {field('Follow Up', r.follow_up_date ? formatDate(r.follow_up_date) : null)}
-
-                {divider}
-                {sectionHead('Contact')}
-
-                {field('Owner', r.owner_name)}
-                {field('Phone', waLink(r.phone))}
-                {field('Alt Phone', r.alternate_phone)}
-                {field('Email', r.email)}
-
-                {divider}
-                {sectionHead('Location')}
-
-                {field('Area', r.area)}
-                {field('Zone', r.zone)}
-                {field('City', r.city)}
-                {field('Address', r.address)}
-
-                {r.remarks && (
-                  <>
-                    {divider}
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <div style={labelStyle}>Remarks</div>
-                      <div style={{
-                        ...valStyle, background: 'var(--bg-input)',
-                        padding: '12px 14px', borderRadius: 10, lineHeight: 1.6,
-                      }}>{r.remarks}</div>
+      <div className="absolute right-0 top-0 h-full w-full max-w-5xl bg-white shadow-2xl">
+        <div className="grid h-full grid-cols-1 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="flex h-full flex-col">
+            <div className="border-b border-slate-200 px-8 py-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="mb-3 flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-lg font-semibold text-white">
+                      {(form.restaurant_name || 'R').charAt(0).toUpperCase()}
                     </div>
-                  </>
-                )}
-              </div>
 
-              {/* Quick Actions */}
-              <div style={{
-                display: 'flex', gap: 8, flexWrap: 'wrap',
-                marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--border-light)',
-              }}>
-                {r.phone && (
-                  <a href={`https://wa.me/91${r.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 8,
-                      padding: '10px 18px', borderRadius: 10, border: 'none',
-                      background: 'var(--accent)', color: '#fff',
-                      textDecoration: 'none', fontSize: 13.5, fontWeight: 550,
-                    }}>
-                    📱 WhatsApp
-                  </a>
-                )}
-                <button onClick={() => showToast('Call logged')} style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 8,
-                  padding: '10px 18px', borderRadius: 10,
-                  border: '1px solid var(--border)', background: 'var(--bg-card)',
-                  color: 'var(--text-primary)', cursor: 'pointer',
-                  fontSize: 13.5, fontWeight: 550, fontFamily: 'var(--font-body)',
-                }}>✆ Log Call</button>
-                <button onClick={() => setTab('Notes')} style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 8,
-                  padding: '10px 18px', borderRadius: 10,
-                  border: '1px solid var(--border)', background: 'var(--bg-card)',
-                  color: 'var(--text-primary)', cursor: 'pointer',
-                  fontSize: 13.5, fontWeight: 550, fontFamily: 'var(--font-body)',
-                }}>✎ Add Note</button>
-              </div>
-            </>
-          )}
-
-          {/* ═══ DETAILS ═══ */}
-          {tab === 'Details' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px 28px' }}>
-              {sectionHead('Restaurant Info')}
-              {field('Brand Name', r.brand_name)}
-              {field('Category', r.category)}
-              {field('Type', r.restaurant_type)}
-              {field('Source', r.source)}
-
-              {divider}
-              {sectionHead('Onboarding')}
-              {field('Commission %', r.commission_percent ? `${r.commission_percent}%` : null)}
-              {field('Discount Offer', r.discount_offer)}
-              {field('FSSAI Number', r.fssai_number ? (
-                <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{r.fssai_number}</span>
-              ) : null)}
-              {field('Menu Pricing', r.menu_pricing)}
-
-              {divider}
-              {sectionHead('Compliance')}
-              {field('Menu Status', r.menu_status)}
-              {field('Contract Status', r.contract_status)}
-              {field('KYC Status', r.kyc_status)}
-              {field('Listing Status', r.listing_status)}
-
-              {divider}
-              {sectionHead('Timeline')}
-              {field('Created', formatDate(r.created_at))}
-              {field('Last Updated', formatDate(r.updated_at))}
-              {field('Last Contacted', r.last_contacted_at ? formatDate(r.last_contacted_at) : null)}
-              {field('Onboarded', r.onboarded_date ? formatDate(r.onboarded_date) : null)}
-              {field('Go Live Date', r.go_live_date ? formatDate(r.go_live_date) : null)}
-              {field('Documents Received', r.documents_received ? '✓ Yes' : 'No')}
-              {field('Converted', r.converted ? '✓ Yes' : 'No')}
-
-              {r.reason && (
-                <>
-                  {divider}
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <div style={labelStyle}>Reason (Lost / Not Interested)</div>
-                    <div style={{
-                      background: '#FEE2E2', padding: '10px 14px',
-                      borderRadius: 10, color: '#991B1B', fontSize: 14,
-                    }}>{r.reason}</div>
+                    <div>
+                      <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+                        {form.restaurant_name || 'Restaurant Details'}
+                      </h2>
+                      <p className="text-sm text-slate-500">
+                        Edit restaurant info, assignee, and remarks
+                      </p>
+                    </div>
                   </div>
-                </>
+
+                  <div className="flex flex-wrap gap-2">
+                    <span
+                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getStatusClasses(
+                        form.lead_status
+                      )}`}
+                    >
+                      {form.lead_status || 'Unknown'}
+                    </span>
+
+                    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                      {form.assigned_to_name || 'Unassigned'}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={onClose}
+                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-8 py-6">
+              <div className="grid grid-cols-1 gap-5">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Restaurant Name
+                  </label>
+                  <input
+                    value={form.restaurant_name || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, restaurant_name: e.target.value })
+                    }
+                    className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Owner Name
+                  </label>
+                  <input
+                    value={form.owner_name || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, owner_name: e.target.value })
+                    }
+                    className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Phone
+                  </label>
+                  <input
+                    value={form.phone || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, phone: e.target.value })
+                    }
+                    className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      City
+                    </label>
+                    <input
+                      value={form.city || ''}
+                      onChange={(e) =>
+                        setForm({ ...form, city: e.target.value })
+                      }
+                      className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Area
+                    </label>
+                    <input
+                      value={form.area || ''}
+                      onChange={(e) =>
+                        setForm({ ...form, area: e.target.value })
+                      }
+                      className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Lead Status
+                    </label>
+                    <select
+                      value={form.lead_status || ''}
+                      onChange={(e) =>
+                        setForm({ ...form, lead_status: e.target.value })
+                      }
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                    >
+                      <option value="">Select status</option>
+                      <option value="Lead">Lead</option>
+                      <option value="Contacted">Contacted</option>
+                      <option value="Qualified">Qualified</option>
+                      <option value="Proposal Sent">Proposal Sent</option>
+                      <option value="Won">Won</option>
+                      <option value="Converted">Converted</option>
+                      <option value="Lost">Lost</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Assignee
+                    </label>
+                    <select
+                      value={form.assigned_to_name || ''}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          assigned_to_name: e.target.value || null,
+                        })
+                      }
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                    >
+                      <option value="">Unassigned</option>
+                      {executives.map((exec) => (
+                        <option key={exec.id} value={exec.full_name}>
+                          {exec.full_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Remarks
+                  </label>
+                  <textarea
+                    rows={7}
+                    value={form.remarks || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, remarks: e.target.value })
+                    }
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                    placeholder="Add notes, follow-up context, call summary..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-200 px-8 py-5">
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={onClose}
+                  className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={handleSave}
+                  disabled={!hasChanges || saving}
+                  className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-l border-slate-200 bg-slate-50 px-6 py-6">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+              Activity Log
+            </h3>
+
+            <div className="mt-5 space-y-3">
+              {loadingActivities ? (
+                <div className="text-sm text-slate-500">Loading activity...</div>
+              ) : activities.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
+                  No activity yet.
+                </div>
+              ) : (
+                activities.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="text-sm font-semibold text-slate-900">
+                      {item.action_type}
+                    </div>
+
+                    {item.field_name && (
+                      <div className="mt-1 text-sm text-slate-600">
+                        Field: {item.field_name}
+                      </div>
+                    )}
+
+                    {(item.old_value || item.new_value) && (
+                      <div className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                        {item.old_value || '—'} → {item.new_value || '—'}
+                      </div>
+                    )}
+
+                    <div className="mt-3 text-xs text-slate-400">
+                      {new Date(item.created_at).toLocaleString()}
+                      {item.actor_name ? ` • ${item.actor_name}` : ''}
+                    </div>
+                  </div>
+                ))
               )}
             </div>
-          )}
-
-          {/* ═══ NOTES ═══ */}
-          {tab === 'Notes' && (
-            <>
-              <div style={{
-                display: 'flex', gap: 10,
-                paddingBottom: 16, borderBottom: '1px solid var(--border-light)', marginBottom: 16,
-              }}>
-                <textarea
-                  value={newNote}
-                  onChange={e => setNewNote(e.target.value)}
-                  placeholder={`Write a note about ${r.restaurant_name}...`}
-                  rows={2}
-                  style={{
-                    flex: 1, padding: '10px 14px',
-                    border: '1px solid var(--border)', borderRadius: 10,
-                    fontFamily: 'var(--font-body)', fontSize: 13.5,
-                    color: 'var(--text-primary)', background: 'var(--bg-input)',
-                    outline: 'none', resize: 'vertical', minHeight: 42,
-                  }}
-                />
-                <button onClick={addNote} style={{
-                  padding: '10px 18px', borderRadius: 10, border: 'none',
-                  background: 'var(--accent)', color: '#fff', cursor: 'pointer',
-                  fontSize: 13, fontWeight: 550, fontFamily: 'var(--font-body)',
-                  alignSelf: 'flex-end',
-                }}>Add</button>
-              </div>
-
-              {notes.length > 0 ? notes.map(n => (
-                <div key={n.id} style={{
-                  display: 'flex', gap: 14, padding: '16px 0',
-                  borderBottom: '1px solid var(--border-light)',
-                }}>
-                  <div className="activity-icon-note" style={{
-                    width: 32, height: 32, flexShrink: 0, borderRadius: 999,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
-                  }}>✎</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13.5, color: 'var(--text-primary)', lineHeight: 1.5 }}>{n.note}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                      {n.created_by} · {timeAgo(n.created_at)}
-                    </div>
-                  </div>
-                </div>
-              )) : (
-                <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-                  No notes yet. Add one above.
-                </div>
-              )}
-            </>
-          )}
-
-          {/* ═══ ACTIVITY ═══ */}
-          {tab === 'Activity' && (
-            <>
-              {activities.length > 0 ? activities.map(a => {
-                const ic = activityIcon[a.action_type] || { cls: 'activity-icon-note', emoji: '•' }
-                return (
-                  <div key={a.id} style={{
-                    display: 'flex', gap: 14, padding: '16px 0',
-                    borderBottom: '1px solid var(--border-light)',
-                  }}>
-                    <div className={ic.cls} style={{
-                      width: 32, height: 32, flexShrink: 0, borderRadius: 999,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
-                    }}>{ic.emoji}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13.5, color: 'var(--text-primary)', lineHeight: 1.5 }}>{a.action_details}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                        {a.performed_by} · {timeAgo(a.created_at)}
-                      </div>
-                    </div>
-                  </div>
-                )
-              }) : (
-                <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-                  No activity recorded for this restaurant
-                </div>
-              )}
-            </>
-          )}
-
-          {/* ═══ DOCUMENTS ═══ */}
-          {tab === 'Documents' && (
-            <>
-              <div style={{ marginBottom: 16 }}>
-                <button onClick={() => showToast('Upload — wire to Supabase Storage')} style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 8,
-                  padding: '10px 18px', borderRadius: 10,
-                  border: '1px solid var(--border)', background: 'var(--bg-card)',
-                  color: 'var(--text-primary)', cursor: 'pointer',
-                  fontSize: 13.5, fontWeight: 550, fontFamily: 'var(--font-body)',
-                }}>↑ Upload Document</button>
-              </div>
-
-              {docs.length > 0 ? docs.map(d => (
-                <div key={d.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 14,
-                  padding: '14px 0', borderBottom: '1px solid var(--border-light)',
-                }}>
-                  <div style={{
-                    width: 40, height: 40, borderRadius: 10, background: '#FEF3C7',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#92400E', fontSize: 16, flexShrink: 0,
-                  }}>📄</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 550, fontSize: 13.5 }}>{d.file_name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                      Uploaded by {d.uploaded_by} · {formatDate(d.created_at)}
-                    </div>
-                  </div>
-                </div>
-              )) : (
-                <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-                  No documents uploaded yet
-                </div>
-              )}
-            </>
-          )}
+          </div>
         </div>
       </div>
-    </>
+    </div>
   )
 }

@@ -6,10 +6,10 @@ export default function AuthenticatedLayout({
   children: React.ReactNode
 }) {
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
-      <Sidebar userName="Goverdhan" userRole="Admin" />
-      <main style={{ flex: 1, overflowY: 'auto', height: '100vh' }}>
-        {children}
+    <div className="min-h-screen bg-slate-100">
+      <Sidebar />
+      <main className="pl-[260px]">
+        <div className="p-8">{children}</div>
       </main>
     </div>
   )

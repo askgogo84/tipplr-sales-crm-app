@@ -1,40 +1,40 @@
 'use client'
 
-import { createClient } from '@/lib/supabase/client'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@supabase/supabase-js'
 
 export default function LogoutButton() {
-  const supabase = createClient()
+  const [loading, setLoading] = useState(false)
+  const router = useRouter()
 
-  async function logout() {
-    await supabase.auth.signOut()
-    window.location.href = '/login'
+  async function handleLogout() {
+    try {
+      setLoading(true)
+
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+
+      await supabase.auth.signOut()
+      router.push('/login')
+      router.refresh()
+    } catch (error) {
+      console.error('Logout failed', error)
+      alert('Logout failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <button
-      onClick={logout}
-      style={{
-        padding: '8px 14px',
-        borderRadius: 10,
-        border: '1px solid var(--border)',
-        background: 'var(--bg-card)',
-        color: 'var(--text-primary)',
-        cursor: 'pointer',
-        fontWeight: 550,
-        fontSize: 13,
-        fontFamily: 'var(--font-body)',
-        transition: 'all 0.15s ease',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'var(--bg-input)'
-        e.currentTarget.style.borderColor = '#D5D0C9'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'var(--bg-card)'
-        e.currentTarget.style.borderColor = 'var(--border)'
-      }}
+      onClick={handleLogout}
+      disabled={loading}
+      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
     >
-      Logout
+      {loading ? 'Logging out...' : 'Logout'}
     </button>
   )
 }

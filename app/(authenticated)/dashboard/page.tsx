@@ -13,16 +13,6 @@ type RecentRestaurant = {
   updated_at: string | null
 }
 
-type ActivityRow = {
-  id: number
-  restaurant_id: string | null
-  action_type: string | null
-  action_details: string | null
-  performed_by: string | null
-  created_at: string | null
-  restaurants?: { restaurant_name?: string | null }[] | { restaurant_name?: string | null } | null
-}
-
 function timeAgo(d: string | null): string {
   if (!d) return '—'
   const now = new Date()
@@ -36,100 +26,25 @@ function timeAgo(d: string | null): string {
   return new Date(d).toLocaleDateString()
 }
 
-function getRestaurantName(restaurants: ActivityRow['restaurants']) {
-  if (!restaurants) return 'Restaurant'
-  if (Array.isArray(restaurants)) return restaurants[0]?.restaurant_name || 'Restaurant'
-  return restaurants.restaurant_name || 'Restaurant'
-}
-
-function statusPill(status: string | null) {
-  const s = (status || '').toLowerCase()
-  const map: Record<string, { bg: string; color: string }> = {
-    lead: { bg: '#E8E4DE', color: '#6B6560' },
-    contacted: { bg: '#DBEAFE', color: '#1E40AF' },
-    interested: { bg: '#FEF3C7', color: '#92400E' },
-    negotiation: { bg: '#EDE9FE', color: '#5B21B6' },
-    won: { bg: '#D1FAE5', color: '#065F46' },
-    lost: { bg: '#FEE2E2', color: '#991B1B' },
-    converted: { bg: '#CFFAFE', color: '#155E75' },
-    'not interested': { bg: '#F3F4F6', color: '#6B7280' },
-  }
-  const c = map[s] || { bg: '#E8E4DE', color: '#6B6560' }
-
+function MetricCard({
+  title,
+  value,
+  accent,
+}: {
+  title: string
+  value: number
+  accent: string
+}) {
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: '4px 10px',
-        borderRadius: 999,
-        background: c.bg,
-        color: c.color,
-        fontSize: 12,
-        fontWeight: 600,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          background: c.color,
-          display: 'inline-block',
-        }}
-      />
-      {status || '—'}
-    </span>
-  )
-}
-
-function statCard(label: string, value: number, accent: string) {
-  return (
-    <div
-      style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: 16,
-        padding: '22px 24px',
-        position: 'relative',
-        overflow: 'hidden',
-        boxShadow: 'var(--shadow-sm)',
-      }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 3,
-          background: accent,
-        }}
-      />
-      <div
-        style={{
-          fontSize: 12,
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '0.06em',
-          color: 'var(--text-tertiary)',
-          marginBottom: 10,
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 36,
-          fontStyle: 'italic',
-          color: 'var(--text-primary)',
-          lineHeight: 1,
-        }}
-      >
-        {value}
+    <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+      <div className={`h-1.5 w-full ${accent}`} />
+      <div className="p-5">
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          {title}
+        </div>
+        <div className="mt-3 text-4xl font-semibold tracking-tight text-slate-900">
+          {value}
+        </div>
       </div>
     </div>
   )
@@ -141,259 +56,119 @@ export default async function DashboardPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [{ data: allLeads }, { data: recentRestaurants }, { data: recentActivity }] = await Promise.all([
-    supabase.from('restaurants').select('lead_status'),
+  const [
+    { count: totalCount },
+    { data: statusRows },
+    { data: recentRestaurants },
+  ] = await Promise.all([
+    supabase
+      .from('restaurants')
+      .select('*', { count: 'exact', head: true }),
+
+    supabase
+      .from('restaurants')
+      .select('lead_status')
+      .range(0, 9999),
+
     supabase
       .from('restaurants')
       .select('id, restaurant_name, owner_name, lead_status, assigned_to_name, updated_at')
       .order('updated_at', { ascending: false, nullsFirst: false })
       .limit(10),
-    supabase
-      .from('activity_logs')
-      .select('id, restaurant_id, action_type, action_details, performed_by, created_at, restaurants(restaurant_name)')
-      .order('created_at', { ascending: false })
-      .limit(8),
   ])
 
-  const leads = (allLeads || []) as LeadRow[]
+  const leads = (statusRows || []) as LeadRow[]
   const restaurants = (recentRestaurants || []) as RecentRestaurant[]
-  const activity = (recentActivity || []) as ActivityRow[]
 
   const countByStatus = (status: string) =>
     leads.filter((x) => (x.lead_status || '').toLowerCase() === status.toLowerCase()).length
 
+  const negotiationCount = leads.filter((x) =>
+    ['qualified', 'proposal sent', 'negotiation'].includes(
+      (x.lead_status || '').toLowerCase()
+    )
+  ).length
+
+  const wonCount = leads.filter((x) =>
+    ['won', 'converted'].includes((x.lead_status || '').toLowerCase())
+  ).length
+
   return (
-    <div style={{ padding: '32px 40px 60px', maxWidth: 1440, margin: '0 auto' }}>
-      <div
-        style={{
-          marginBottom: 32,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: 20,
-          flexWrap: 'wrap',
-        }}
-      >
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 34,
-              fontWeight: 400,
-              fontStyle: 'italic',
-              letterSpacing: '-0.02em',
-              color: 'var(--text-primary)',
-              lineHeight: 1.15,
-            }}
-          >
+          <h1 className="text-4xl font-semibold tracking-tight text-slate-900">
             Dashboard
           </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 6 }}>
-            Sales pipeline overview & key metrics
+          <p className="mt-2 text-sm text-slate-500">
+            Sales pipeline overview and CRM activity snapshot
           </p>
         </div>
 
-        <form action="/api/sync" method="POST">
+        <form action="/api/sync" method="GET">
           <button
             type="submit"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '10px 18px',
-              borderRadius: 10,
-              border: '1px solid var(--border)',
-              background: 'var(--bg-card)',
-              color: 'var(--text-primary)',
-              cursor: 'pointer',
-              fontSize: 13.5,
-              fontWeight: 600,
-              fontFamily: 'var(--font-body)',
-            }}
+            className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
           >
-            ↻ Sync Sheets
+            Sync Sheets
           </button>
         </form>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: 16,
-          marginBottom: 32,
-        }}
-      >
-        {statCard('Total Leads', leads.length, 'var(--accent)')}
-        {statCard('Contacted', countByStatus('Contacted'), '#3B82F6')}
-        {statCard('Negotiation', countByStatus('Negotiation'), '#8B5CF6')}
-        {statCard('Won', countByStatus('Won'), '#059669')}
-        {statCard('Lost', countByStatus('Lost'), '#DC2626')}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <MetricCard title="Total Leads" value={totalCount || 0} accent="bg-slate-900" />
+        <MetricCard title="Contacted" value={countByStatus('Contacted')} accent="bg-blue-500" />
+        <MetricCard title="Negotiation" value={negotiationCount} accent="bg-violet-500" />
+        <MetricCard title="Won" value={wonCount} accent="bg-emerald-500" />
+        <MetricCard title="Lost" value={countByStatus('Lost')} accent="bg-rose-500" />
       </div>
 
-      <div
-        style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
-          borderRadius: 16,
-          overflow: 'hidden',
-          marginBottom: 24,
-          boxShadow: 'var(--shadow-sm)',
-        }}
-      >
-        <div style={{ padding: '22px 24px 18px', borderBottom: '1px solid var(--border-light)' }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontStyle: 'italic' }}>
-            Recent Activity
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
-            Latest changes across your pipeline
-          </div>
-        </div>
-
-        <div style={{ padding: '12px 24px 20px' }}>
-          {activity.length > 0 ? (
-            activity.map((a) => (
-              <div
-                key={a.id}
-                style={{
-                  display: 'flex',
-                  gap: 14,
-                  padding: '14px 0',
-                  borderBottom: '1px solid var(--border-light)',
-                }}
-              >
-                <div
-                  style={{
-                    width: 32,
-                    height: 32,
-                    flexShrink: 0,
-                    borderRadius: 999,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 14,
-                    background: '#F5E6D8',
-                    color: '#C67A3C',
-                  }}
-                >
-                  •
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                    <strong>{getRestaurantName(a.restaurants)}</strong> — {a.action_details || 'Activity updated'}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                    {a.performed_by || 'System'} · {timeAgo(a.created_at)}
-                  </div>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-              No recent activity
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div
-        style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
-          borderRadius: 16,
-          overflow: 'hidden',
-          boxShadow: 'var(--shadow-sm)',
-        }}
-      >
-        <div
-          style={{
-            padding: '22px 24px 18px',
-            borderBottom: '1px solid var(--border-light)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
+      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-5 flex items-center justify-between">
           <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontStyle: 'italic' }}>
-              Recently Updated
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+            <h2 className="text-2xl font-semibold text-slate-900">Recently Updated</h2>
+            <p className="mt-1 text-sm text-slate-500">
               Last 10 restaurants modified
-            </div>
+            </p>
           </div>
 
           <a
             href="/restaurants"
-            style={{
-              padding: '7px 12px',
-              borderRadius: 10,
-              background: 'none',
-              color: 'var(--text-secondary)',
-              textDecoration: 'none',
-              fontSize: 12.5,
-              fontWeight: 600,
-            }}
+            className="text-sm font-medium text-slate-700 hover:text-slate-900"
           >
             View all →
           </a>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                {['Restaurant', 'Owner', 'Status', 'Assigned To', 'Updated'].map((h) => (
-                  <th
-                    key={h}
-                    style={{
-                      padding: '13px 18px',
-                      textAlign: 'left',
-                      fontSize: 11.5,
-                      fontWeight: 600,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.06em',
-                      color: 'var(--text-tertiary)',
-                      background: 'var(--bg-table-header)',
-                      borderBottom: '1px solid var(--border)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
+        <div className="overflow-hidden rounded-2xl border border-slate-200">
+          <div className="grid grid-cols-5 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div>Restaurant</div>
+            <div>Owner</div>
+            <div>Status</div>
+            <div>Assigned To</div>
+            <div>Updated</div>
+          </div>
 
-            <tbody>
-              {restaurants.length > 0 ? (
-                restaurants.map((r) => (
-                  <tr key={r.id}>
-                    <td style={tdStyle}>{r.restaurant_name || '—'}</td>
-                    <td style={tdStyle}>{r.owner_name || '—'}</td>
-                    <td style={tdStyle}>{statusPill(r.lead_status)}</td>
-                    <td style={tdStyle}>{r.assigned_to_name || '—'}</td>
-                    <td style={tdStyle}>{timeAgo(r.updated_at)}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-tertiary)' }}>
-                    No restaurant data found
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          {restaurants.length > 0 ? (
+            restaurants.map((r) => (
+              <div
+                key={r.id}
+                className="grid grid-cols-5 border-b border-slate-100 px-5 py-4 text-sm text-slate-700"
+              >
+                <div className="font-medium text-slate-900">{r.restaurant_name || '—'}</div>
+                <div>{r.owner_name || '—'}</div>
+                <div>{r.lead_status || '—'}</div>
+                <div>{r.assigned_to_name || '—'}</div>
+                <div>{timeAgo(r.updated_at)}</div>
+              </div>
+            ))
+          ) : (
+            <div className="px-5 py-10 text-center text-sm text-slate-500">
+              No restaurant data found
+            </div>
+          )}
         </div>
       </div>
     </div>
   )
-}
-
-const tdStyle: React.CSSProperties = {
-  padding: '14px 18px',
-  fontSize: 13.5,
-  borderBottom: '1px solid var(--border-light)',
-  verticalAlign: 'middle',
 }

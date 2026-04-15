@@ -1,37 +1,31 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET() {
   try {
-    const { id } = await params
-
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
     const { data, error } = await supabase
-      .from('restaurant_activity')
-      .select('*')
-      .eq('restaurant_id', id)
-      .order('created_at', { ascending: false })
+      .from('team_members')
+      .select('id, full_name')
+      .order('full_name', { ascending: true })
 
     if (error) {
       return NextResponse.json(
-        { error: error.message, activities: [] },
+        { error: error.message, executives: [] },
         { status: 500 }
       )
     }
 
     return NextResponse.json({
-      activities: data || [],
+      executives: data || [],
     })
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: 'Failed to load activity', activities: [] },
+      { error: 'Failed to fetch executives', executives: [] },
       { status: 500 }
     )
   }

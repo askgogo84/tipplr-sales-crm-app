@@ -1,5 +1,7 @@
 import { google } from 'googleapis'
 import { createClient } from '@supabase/supabase-js'
+import fs from 'fs'
+import path from 'path'
 
 function clean(value: unknown): string | null {
   if (value === undefined || value === null) return null
@@ -17,8 +19,41 @@ function normalizeBoolean(value: string | null | undefined): boolean | null {
 
 export async function GET() {
   try {
+    if (!process.env.GOOGLE_SHEET_ID) {
+      return Response.json(
+        { success: false, error: 'Missing GOOGLE_SHEET_ID' },
+        { status: 500 }
+      )
+    }
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return Response.json(
+        { success: false, error: 'Missing NEXT_PUBLIC_SUPABASE_URL' },
+        { status: 500 }
+      )
+    }
+
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return Response.json(
+        { success: false, error: 'Missing SUPABASE_SERVICE_ROLE_KEY' },
+        { status: 500 }
+      )
+    }
+
+    const keyFile = path.join(process.cwd(), 'google-service-account.json')
+
+    if (!fs.existsSync(keyFile)) {
+      return Response.json(
+        {
+          success: false,
+          error: `Missing google-service-account.json at ${keyFile}`,
+        },
+        { status: 500 }
+      )
+    }
+
     const auth = new google.auth.GoogleAuth({
-      keyFile: process.cwd() + '/google-service-account.json',
+      keyFile,
       scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
     })
 
@@ -27,33 +62,52 @@ export async function GET() {
       auth,
     })
 
-    const spreadsheetId = process.env.GOOGLE_SHEET_ID!
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID
+    const targetGid = 964452752
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    )
 
     const meta = await sheets.spreadsheets.get({ spreadsheetId })
-    const firstSheetTitle = meta.data.sheets?.[0]?.properties?.title
 
-    if (!firstSheetTitle) {
-      return Response.json({
-        success: false,
-        error: 'Could not detect sheet tab name',
-      })
+    const matchedSheet = meta.data.sheets?.find(
+      (sheet) => sheet.properties?.sheetId === targetGid
+    )
+
+    const sheetTitle = matchedSheet?.properties?.title
+
+    if (!sheetTitle) {
+      return Response.json(
+        {
+          success: false,
+          error: `Could not find sheet tab for gid ${targetGid}`,
+          availableSheets:
+            meta.data.sheets?.map((s) => ({
+              title: s.properties?.title,
+              gid: s.properties?.sheetId,
+            })) || [],
+        },
+        { status: 500 }
+      )
     }
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${firstSheetTitle}!A:Z`,
+      range: `${sheetTitle}!A:Z`,
     })
 
     const rows = response.data.values || []
+
     if (rows.length < 2) {
       return Response.json({
         success: true,
+        sheet: sheetTitle,
+        gid: targetGid,
         synced: 0,
-        message: 'No data rows found',
+        totalRows: 0,
+        errors: [],
       })
     }
 
@@ -129,6 +183,7 @@ export async function GET() {
           discount: discount || null,
           reason: reason || null,
           source_row_number,
+          updated_at: new Date().toISOString(),
         }
 
         const existing = await supabase
@@ -137,19 +192,21 @@ export async function GET() {
           .eq('source_row_number', source_row_number)
           .maybeSingle()
 
+        if (existing.error) throw new Error(existing.error.message)
+
         if (existing.data?.id) {
           const { error } = await supabase
             .from('restaurants')
             .update(payload)
             .eq('id', existing.data.id)
 
-          if (error) throw error
+          if (error) throw new Error(error.message)
         } else {
           const { error } = await supabase
             .from('restaurants')
             .insert(payload)
 
-          if (error) throw error
+          if (error) throw new Error(error.message)
         }
 
         synced++
@@ -163,15 +220,21 @@ export async function GET() {
 
     return Response.json({
       success: true,
-      sheet: firstSheetTitle,
+      sheet: sheetTitle,
+      gid: targetGid,
       synced,
       totalRows: dataRows.length,
       errors,
     })
   } catch (err) {
-    return Response.json({
-      success: false,
-      error: err instanceof Error ? err.message : 'Unknown error',
-    })
+    console.error('SYNC ROUTE ERROR:', err)
+
+    return Response.json(
+      {
+        success: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      },
+      { status: 500 }
+    )
   }
 }
