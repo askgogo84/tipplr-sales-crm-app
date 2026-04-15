@@ -69,6 +69,7 @@ export default function RestaurantsPage() {
 
         const res = await fetch(`/api/restaurants?${params.toString()}`, {
           cache: 'no-store',
+          credentials: 'include',   // ✅ CRITICAL: sends session cookie
         })
 
         const json: ApiResponse = await res.json()

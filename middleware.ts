@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function updateSession(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -13,12 +13,6 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          )
-
-          response = NextResponse.next({ request })
-
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           )
@@ -29,7 +23,7 @@ export async function updateSession(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login')
+  const isAuthPage = request.nextUrl.pathname === '/login'
   const isProtected =
     request.nextUrl.pathname.startsWith('/dashboard') ||
     request.nextUrl.pathname.startsWith('/restaurants')
@@ -43,4 +37,11 @@ export async function updateSession(request: NextRequest) {
   }
 
   return response
+}
+
+export const config = {
+  matcher: [
+    // Exclude API routes, static files, and favicon
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+  ],
 }
