@@ -1,25 +1,28 @@
-import type { Metadata } from 'next'
-import './globals.css'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import Sidebar from '@/components/sidebar'
 
-export const metadata: Metadata = {
-  title: 'Tipplr Sales CRM',
-  description: 'Internal sales CRM for Tipplr',
-}
-
-export default function RootLayout({
+export default async function AuthenticatedLayout({
   children,
-}: Readonly<{ children: React.ReactNode }>) {
+}: {
+  children: React.ReactNode
+}) {
+  const supabase = createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  const userName = user.email?.split('@')[0] || 'User'
+
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body>{children}</body>
-    </html>
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
+      <Sidebar userName={userName} userRole="Admin" />
+      <main style={{ flex: 1, overflowY: 'auto', height: '100vh' }}>
+        {children}
+      </main>
+    </div>
   )
 }

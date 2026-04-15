@@ -1,109 +1,64 @@
 import { google } from 'googleapis'
 import { createClient } from '@supabase/supabase-js'
 
-function normalizeBoolean(value: string | null | undefined): boolean | null {
-  if (!value) return null
-  const v = String(value).trim().toLowerCase()
-  if (['yes', 'y', 'true', '1', 'live'].includes(v)) return true
-  if (['no', 'n', 'false', '0', 'not live'].includes(v)) return false
-  return null
-}
-
 function clean(value: unknown): string | null {
   if (value === undefined || value === null) return null
   const s = String(value).trim()
   return s === '' ? null : s
 }
 
+function normalizeBoolean(value: string | null | undefined): boolean | null {
+  if (!value) return null
+  const v = value.trim().toLowerCase()
+  if (['yes', 'y', 'true', '1', 'live'].includes(v)) return true
+  if (['no', 'n', 'false', '0', 'not live'].includes(v)) return false
+  return null
+}
+
 export async function GET() {
-  return syncSheet()
-}
-
-export async function POST() {
-  return syncSheet()
-}
-
-async function syncSheet() {
   try {
-    if (!process.env.GOOGLE_SHEET_ID) {
-      return Response.json(
-        { success: false, error: 'Missing GOOGLE_SHEET_ID' },
-        { status: 500 }
-      )
-    }
-
-    if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) {
-      return Response.json(
-        { success: false, error: 'Missing GOOGLE_SERVICE_ACCOUNT_EMAIL' },
-        { status: 500 }
-      )
-    }
-
-    if (!process.env.GOOGLE_PRIVATE_KEY) {
-      return Response.json(
-        { success: false, error: 'Missing GOOGLE_PRIVATE_KEY' },
-        { status: 500 }
-      )
-    }
-
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      return Response.json(
-        { success: false, error: 'Missing NEXT_PUBLIC_SUPABASE_URL' },
-        { status: 500 }
-      )
-    }
-
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return Response.json(
-        { success: false, error: 'Missing SUPABASE_SERVICE_ROLE_KEY' },
-        { status: 500 }
-      )
-    }
-
-    const auth = new google.auth.JWT(
-      process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      undefined,
-      process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      ['https://www.googleapis.com/auth/spreadsheets.readonly']
-    )
-
-    const sheets = google.sheets({ version: 'v4', auth })
-
-    // Read spreadsheet metadata to get the first tab name
-    const meta = await sheets.spreadsheets.get({
-      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+    const auth = new google.auth.GoogleAuth({
+      keyFile: process.cwd() + '/google-service-account.json',
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
     })
 
+    const sheets = google.sheets({
+      version: 'v4',
+      auth,
+    })
+
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID!
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    const meta = await sheets.spreadsheets.get({ spreadsheetId })
     const firstSheetTitle = meta.data.sheets?.[0]?.properties?.title
+
     if (!firstSheetTitle) {
-      return Response.json(
-        { success: false, error: 'Could not determine first sheet title' },
-        { status: 500 }
-      )
+      return Response.json({
+        success: false,
+        error: 'Could not detect sheet tab name',
+      })
     }
 
-    // Read first tab
-    const sheetResponse = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
       range: `${firstSheetTitle}!A:Z`,
     })
 
-    const rows = sheetResponse.data.values || []
+    const rows = response.data.values || []
     if (rows.length < 2) {
       return Response.json({
         success: true,
-        message: 'No data rows found in sheet',
         synced: 0,
+        message: 'No data rows found',
       })
     }
 
     const headers = rows[0].map((h) => String(h).trim())
     const dataRows = rows.slice(1)
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    )
 
     let synced = 0
     const errors: Array<{ row: number; error: string }> = []
@@ -118,13 +73,10 @@ async function syncSheet() {
           record[header] = row[i] || ''
         })
 
-        // Sheet column mapping based on your screenshot/current sheet
         const restaurant_name = clean(record['Brand Name'])
         if (!restaurant_name) continue
 
         const priority = clean(record['Priority'])
-        const outlets = clean(record['#Outlets'])
-        const pos = clean(record['POS'])
         const brand_contact_person = clean(record['Brand Contact Person'])
         const designation = clean(record['Designation'])
         const contact_no = clean(record['Contact No'])
@@ -134,39 +86,36 @@ async function syncSheet() {
         const approached_on = clean(record['Approached On'])
         const converted = clean(record['Converted'])
         const documents_received = clean(record['Documents Received'])
-        const go_live_on_digihat = clean(record['Go Live on Digibhaat']) || clean(record['Go Live on Digihat']) || clean(record['Go Live on Digilist'])
+        const go_live_on_digihat =
+          clean(record['Go Live on Digibhaat']) ||
+          clean(record['Go Live on Digihat']) ||
+          clean(record['Go Live on Digilist'])
         const go_live_date = clean(record['Go Live Date'])
         const menu_pricing = clean(record['Menu Pricing'])
         const discount = clean(record['Discount'])
-        const last_contacted_on = clean(record['Last Contacted On'])
-        const reason = clean(record['Reason (if not agreeing on Menu Price/Offline menu)']) || clean(record['Reason'])
+        const reason =
+          clean(record['Reason (if not agreeing on Menu Price/Offline menu)']) ||
+          clean(record['Reason'])
         const remarks = clean(record['Remarks (if any)'])
-        const added_to_master = clean(record['Added to Master (ONDC Column)'])
 
-        // Derive lead status smartly
         let lead_status = 'Lead'
-        if (converted && converted.toLowerCase() === 'yes') {
+        if (converted?.toLowerCase() === 'yes') {
           lead_status = 'Converted'
-        } else if (contacted && contacted.toLowerCase() === 'yes') {
+        } else if (contacted?.toLowerCase() === 'yes') {
           lead_status = 'Contacted'
         }
 
-        // Build a readable remarks field
         const remarksParts = [
           remarks,
           designation ? `Designation: ${designation}` : null,
-          pos ? `POS: ${pos}` : null,
-          outlets ? `Outlets: ${outlets}` : null,
           zomato_page_number ? `Zomato: ${zomato_page_number}` : null,
           approached_on ? `Approached On: ${approached_on}` : null,
-          added_to_master ? `Added to Master: ${added_to_master}` : null,
         ].filter(Boolean)
 
         const payload = {
           restaurant_name,
           owner_name: brand_contact_person || null,
           phone: contact_no || null,
-          area: null,
           city: 'Bengaluru',
           priority: priority || null,
           lead_status,
@@ -179,51 +128,35 @@ async function syncSheet() {
           menu_pricing: menu_pricing || null,
           discount: discount || null,
           reason: reason || null,
-          last_contacted_on: last_contacted_on || null,
           source_row_number,
         }
 
-        // Upsert by source_row_number if available, otherwise by restaurant_name
-        const { error } = await supabase
+        const existing = await supabase
           .from('restaurants')
-          .upsert(payload, {
-            onConflict: 'source_row_number',
-          })
+          .select('id')
+          .eq('source_row_number', source_row_number)
+          .maybeSingle()
 
-        if (error) {
-          // fallback in case source_row_number doesn't exist as a unique conflict target
-          const existing = await supabase
+        if (existing.data?.id) {
+          const { error } = await supabase
             .from('restaurants')
-            .select('id')
-            .eq('restaurant_name', restaurant_name)
-            .limit(1)
-            .maybeSingle()
+            .update(payload)
+            .eq('id', existing.data.id)
 
-          if (existing.data?.id) {
-            const updateRes = await supabase
-              .from('restaurants')
-              .update(payload)
-              .eq('id', existing.data.id)
+          if (error) throw error
+        } else {
+          const { error } = await supabase
+            .from('restaurants')
+            .insert(payload)
 
-            if (updateRes.error) {
-              throw updateRes.error
-            }
-          } else {
-            const insertRes = await supabase
-              .from('restaurants')
-              .insert(payload)
-
-            if (insertRes.error) {
-              throw insertRes.error
-            }
-          }
+          if (error) throw error
         }
 
         synced++
       } catch (err) {
         errors.push({
           row: source_row_number,
-          error: err instanceof Error ? err.message : 'Unknown row error',
+          error: err instanceof Error ? err.message : 'Unknown error',
         })
       }
     }
@@ -235,13 +168,10 @@ async function syncSheet() {
       totalRows: dataRows.length,
       errors,
     })
-  } catch (error) {
-    return Response.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unexpected sync error',
-      },
-      { status: 500 }
-    )
+  } catch (err) {
+    return Response.json({
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error',
+    })
   }
 }
