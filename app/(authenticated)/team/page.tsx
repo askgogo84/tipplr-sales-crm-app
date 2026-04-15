@@ -1,7 +1,8 @@
-import { redirect } from 'next/navigation'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createClient as createPublicClient } from '@supabase/supabase-js'
-import TeamManager from '@/components/team-manager'
+import { redirect } from 'next/navigation'
+import { PageHeader } from '@/components/ui'
+import TeamClient from '@/components/team-client'
 
 type Profile = {
   id: number
@@ -12,13 +13,8 @@ type Profile = {
 
 export default async function TeamPage() {
   const authClient = await createServerClient()
-  const {
-    data: { user },
-  } = await authClient.auth.getUser()
-
-  if (!user) {
-    redirect('/login')
-  }
+  const { data: { user } } = await authClient.auth.getUser()
+  if (!user) redirect('/login')
 
   const supabase = createPublicClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,19 +27,17 @@ export default async function TeamPage() {
     .order('full_name', { ascending: true })
 
   if (error) {
-    return <main style={{ padding: 24 }}>Error loading team page</main>
+    return (
+      <div style={{ padding: '32px 40px' }}>
+        <PageHeader title="Team" subtitle="Error loading team data" />
+      </div>
+    )
   }
 
   return (
-    <main>
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ marginBottom: 8, fontSize: 30 }}>Team</h1>
-        <p style={{ opacity: 0.7, marginTop: 0 }}>
-          Add members here and use them as assignees inside the CRM.
-        </p>
-      </div>
-
-      <TeamManager initialData={(data || []) as Profile[]} />
-    </main>
+    <div style={{ padding: '32px 40px 60px', maxWidth: 1440, margin: '0 auto' }}>
+      <PageHeader title="Team" subtitle="Manage your sales team members and assignees" />
+      <TeamClient initialData={(data || []) as Profile[]} />
+    </div>
   )
 }

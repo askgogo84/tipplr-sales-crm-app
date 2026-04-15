@@ -1,26 +1,123 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg: #FAF8F5;
+    --bg-card: #FFFFFF;
+    --bg-sidebar: #1A1814;
+    --bg-sidebar-hover: #2A2620;
+    --bg-sidebar-active: #35302A;
+    --bg-input: #F5F3F0;
+    --bg-table-header: #F8F6F3;
+    --bg-table-hover: #FBF9F7;
+    --bg-overlay: rgba(26,24,20,0.55);
+    --bg-badge: #F0EDE8;
+
+    --text-primary: #1A1814;
+    --text-secondary: #6B6560;
+    --text-tertiary: #9C9690;
+    --text-sidebar: #C8C2B8;
+    --text-sidebar-active: #FFFFFF;
+    --text-on-accent: #FFFFFF;
+
+    --accent: #C67A3C;
+    --accent-hover: #B56A2C;
+    --accent-light: #FDF3EB;
+    --accent-badge: #F5E6D8;
+
+    --border: #E8E4DE;
+    --border-light: #F0EDE8;
+    --border-sidebar: #2A2620;
+
+    --shadow-sm: 0 1px 2px rgba(26,24,20,0.04);
+    --shadow-md: 0 4px 12px rgba(26,24,20,0.06);
+    --shadow-lg: 0 12px 40px rgba(26,24,20,0.1);
+    --shadow-xl: 0 20px 60px rgba(26,24,20,0.14);
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 20px;
+    --radius-pill: 999px;
+
+    --font-display: 'Instrument Serif', Georgia, serif;
+    --font-body: 'DM Sans', -apple-system, sans-serif;
   }
 }
 
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text-primary);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D5D0C9; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #B5B0A9; }
+
+/* ─── Typography helpers ─── */
+.font-display {
+  font-family: var(--font-display);
+  font-style: italic;
+  letter-spacing: -0.02em;
+}
+
+/* ─── Status badge colors ─── */
+.badge-lead { background: #E8E4DE; color: #6B6560; }
+.badge-contacted { background: #DBEAFE; color: #1E40AF; }
+.badge-interested { background: #FEF3C7; color: #92400E; }
+.badge-negotiation { background: #EDE9FE; color: #5B21B6; }
+.badge-won { background: #D1FAE5; color: #065F46; }
+.badge-lost { background: #FEE2E2; color: #991B1B; }
+.badge-converted { background: #CFFAFE; color: #155E75; }
+.badge-not-interested { background: #F3F4F6; color: #6B7280; }
+
+.badge-priority-high { background: #FEE2E2; color: #991B1B; }
+.badge-priority-medium { background: #FEF3C7; color: #92400E; }
+.badge-priority-low { background: #D1FAE5; color: #065F46; }
+
+/* ─── Activity icon colors ─── */
+.activity-icon-note { background: #DBEAFE; color: #1E40AF; }
+.activity-icon-status { background: #D1FAE5; color: #065F46; }
+.activity-icon-assign { background: #EDE9FE; color: #5B21B6; }
+.activity-icon-call { background: #FEF3C7; color: #92400E; }
+.activity-icon-doc { background: #FCE7F3; color: #9D174D; }
+
+/* ─── Animations ─── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-in {
+  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.delay-1 { animation-delay: 0.05s; }
+.delay-2 { animation-delay: 0.1s; }
+.delay-3 { animation-delay: 0.15s; }
+.delay-4 { animation-delay: 0.2s; }
+.delay-5 { animation-delay: 0.25s; }
+
+/* ─── Responsive helpers ─── */
+@media (max-width: 900px) {
+  .team-grid-responsive {
+    grid-template-columns: 1fr !important;
+  }
 }
