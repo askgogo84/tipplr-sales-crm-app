@@ -14,13 +14,24 @@ export default function LogoutButton() {
     <button
       onClick={logout}
       style={{
-        padding: '10px 14px',
-        borderRadius: 12,
-        border: '1px solid #2a2a2a',
-        background: '#141414',
-        color: '#fff',
+        padding: '8px 14px',
+        borderRadius: 10,
+        border: '1px solid var(--border)',
+        background: 'var(--bg-card)',
+        color: 'var(--text-primary)',
         cursor: 'pointer',
-        fontWeight: 600,
+        fontWeight: 550,
+        fontSize: 13,
+        fontFamily: 'var(--font-body)',
+        transition: 'all 0.15s ease',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'var(--bg-input)'
+        e.currentTarget.style.borderColor = '#D5D0C9'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'var(--bg-card)'
+        e.currentTarget.style.borderColor = 'var(--border)'
       }}
     >
       Logout

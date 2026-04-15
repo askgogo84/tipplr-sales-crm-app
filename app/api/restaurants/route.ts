@@ -1,70 +1,122 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
-
-export const dynamic = 'force-dynamic'
+import { createClient } from '@supabase/supabase-js'
 
 export async function GET(request: Request) {
   try {
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
+    const { searchParams } = new URL(request.url)
+
+    const page = Math.max(Number(searchParams.get('page') || '1'), 1)
+    const pageSize = Math.max(Number(searchParams.get('pageSize') || '30'), 1)
+    const search = (searchParams.get('search') || '').trim()
+    const status = (searchParams.get('status') || '').trim()
+    const assignedTo = (searchParams.get('assignedTo') || '').trim()
+
+    const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value
-          },
-          set() {},
-          remove() {},
-        },
-      }
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
 
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    let query = supabase
+      .from('restaurants')
+      .select(
+        `
+        id,
+        restaurant_name,
+        brand_name,
+        owner_name,
+        phone,
+        alternate_phone,
+        email,
+        area,
+        zone,
+        city,
+        address,
+        restaurant_type,
+        category,
+        source,
+        lead_status,
+        assigned_to,
+        assigned_to_name,
+        follow_up_date,
+        last_contacted_at,
+        onboarded_date,
+        commission_percent,
+        discount_offer,
+        fssai_number,
+        menu_status,
+        contract_status,
+        kyc_status,
+        listing_status,
+        priority,
+        remarks,
+        created_at,
+        updated_at,
+        converted,
+        documents_received,
+        go_live_date,
+        menu_pricing,
+        reason,
+        source_row_number
+      `,
+        { count: 'exact' }
+      )
+      .order('updated_at', { ascending: false, nullsFirst: false })
+
+    if (status) {
+      query = query.eq('lead_status', status)
     }
 
-    const url = new URL(request.url)
-    const page = parseInt(url.searchParams.get('page') || '1')
-    const pageSize = parseInt(url.searchParams.get('pageSize') || '50')
-    const search = url.searchParams.get('search') || ''
-    const status = url.searchParams.get('status') || ''
-    const assignedTo = url.searchParams.get('assignedTo') || ''
+    if (assignedTo) {
+      query = query.eq('assigned_to_name', assignedTo)
+    }
+
+    if (search) {
+      query = query.or(
+        [
+          `restaurant_name.ilike.%${search}%`,
+          `owner_name.ilike.%${search}%`,
+          `phone.ilike.%${search}%`,
+          `email.ilike.%${search}%`,
+          `area.ilike.%${search}%`,
+          `city.ilike.%${search}%`,
+          `assigned_to_name.ilike.%${search}%`,
+        ].join(',')
+      )
+    }
 
     const from = (page - 1) * pageSize
     const to = from + pageSize - 1
 
-    let query = supabase
-      .from('restaurants')
-      .select('*', { count: 'exact' })
-      .range(from, to)
-      .order('created_at', { ascending: false })
+    const { data, error, count } = await query.range(from, to)
 
-    if (search) {
-      query = query.or(`restaurant_name.ilike.%${search}%,owner_name.ilike.%${search}%,phone.ilike.%${search}%,assigned_to_name.ilike.%${search}%`)
+    if (error) {
+      return Response.json(
+        {
+          success: false,
+          error: error.message,
+        },
+        { status: 500 }
+      )
     }
-    if (status) query = query.eq('lead_status', status)
-    if (assignedTo) query = query.ilike('assigned_to_name', `%${assignedTo}%`)
 
-    const { data, error, count } = await query
-    if (error) throw error
+    const total = count || 0
+    const totalPages = Math.max(Math.ceil(total / pageSize), 1)
 
-    return NextResponse.json({
+    return Response.json({
       success: true,
       data: data || [],
       pagination: {
         page,
         pageSize,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / pageSize),
+        total,
+        totalPages,
       },
     })
-  } catch (error: any) {
-    console.error('Restaurants API error:', error)
-    return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+  } catch (error) {
+    return Response.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unexpected server error',
+      },
       { status: 500 }
     )
   }
