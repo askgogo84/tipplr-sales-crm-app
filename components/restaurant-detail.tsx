@@ -9,7 +9,7 @@ type Executive = {
 
 type Restaurant = {
   id: string
-  restaurant_name: string
+  restaurant_name: string | null
   owner_name: string | null
   phone: string | null
   city: string | null
@@ -31,9 +31,10 @@ type ActivityItem = {
 
 type Props = {
   restaurant: Restaurant | null
-  open: boolean
+  open?: boolean
   onClose: () => void
-  executives: Executive[]
+  executives?: Executive[]
+  assigneeOptions?: string[]
   onSaved?: () => void
 }
 
@@ -59,15 +60,26 @@ function getStatusClasses(status: string | null) {
 
 export default function RestaurantDetailPanel({
   restaurant,
-  open,
+  open = true,
   onClose,
-  executives,
+  executives = [],
+  assigneeOptions = [],
   onSaved,
 }: Props) {
   const [form, setForm] = useState<Restaurant | null>(restaurant)
   const [saving, setSaving] = useState(false)
   const [activities, setActivities] = useState<ActivityItem[]>([])
   const [loadingActivities, setLoadingActivities] = useState(false)
+
+  const mergedExecutives: Executive[] =
+    executives.length > 0
+      ? executives
+      : assigneeOptions
+          .filter((name) => name && name !== 'Unassigned')
+          .map((name, index) => ({
+            id: String(index),
+            full_name: name,
+          }))
 
   useEffect(() => {
     setForm(restaurant)
@@ -310,7 +322,7 @@ export default function RestaurantDetailPanel({
                       className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
                     >
                       <option value="">Unassigned</option>
-                      {executives.map((exec) => (
+                      {mergedExecutives.map((exec) => (
                         <option key={exec.id} value={exec.full_name}>
                           {exec.full_name}
                         </option>
