@@ -40,21 +40,27 @@ type Props = {
 
 function getStatusClasses(status: string | null) {
   switch ((status || '').toLowerCase()) {
-    case 'lead':
-      return 'bg-slate-100 text-slate-700 border-slate-200'
-    case 'contacted':
-      return 'bg-blue-100 text-blue-700 border-blue-200'
-    case 'qualified':
-      return 'bg-violet-100 text-violet-700 border-violet-200'
-    case 'proposal sent':
-      return 'bg-amber-100 text-amber-700 border-amber-200'
-    case 'won':
-    case 'converted':
+    case 'agreed':
       return 'bg-emerald-100 text-emerald-700 border-emerald-200'
-    case 'lost':
+    case 'not interested':
+      return 'bg-slate-100 text-slate-700 border-slate-200'
+    case 'visit':
+      return 'bg-amber-100 text-amber-700 border-amber-200'
+    case 'incorrect number':
+    case 'wrong number':
+    case 'invalid number':
       return 'bg-rose-100 text-rose-700 border-rose-200'
-    default:
+    case "couldn't connect":
+    case 'call back':
+    case 'followup':
+      return 'bg-blue-100 text-blue-700 border-blue-200'
+    case 'temporarily closed':
+    case 'permanently closed':
       return 'bg-gray-100 text-gray-700 border-gray-200'
+    case 'converted':
+      return 'bg-green-100 text-green-700 border-green-200'
+    default:
+      return 'bg-slate-100 text-slate-700 border-slate-200'
   }
 }
 
@@ -296,14 +302,24 @@ export default function RestaurantDetailPanel({
                       }
                       className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
                     >
-                      <option value="">Select status</option>
-                      <option value="Lead">Lead</option>
-                      <option value="Contacted">Contacted</option>
-                      <option value="Qualified">Qualified</option>
-                      <option value="Proposal Sent">Proposal Sent</option>
-                      <option value="Won">Won</option>
-                      <option value="Converted">Converted</option>
-                      <option value="Lost">Lost</option>
+                      {[
+  'Agreed',
+  'Not Interested',
+  'Visit',
+  'Incorrect Number',
+  "Couldn't Connect",
+  'Call Back',
+  'Wrong Number',
+  'Invalid Number',
+  'Temporarily Closed',
+  'Permanently Closed',
+  'Followup',
+  'Converted',
+].map((status) => (
+  <option key={status} value={status}>
+    {status}
+  </option>
+))}
                     </select>
                   </div>
 
