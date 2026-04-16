@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 
 type LeadRow = {
   lead_status: string | null
+  follow_up_date: string | null
 }
 
 type RecentRestaurant = {
@@ -11,6 +12,7 @@ type RecentRestaurant = {
   lead_status: string | null
   assigned_to_name: string | null
   updated_at: string | null
+  follow_up_date: string | null
 }
 
 function timeAgo(d: string | null): string {
@@ -56,42 +58,27 @@ export default async function DashboardPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [
-    { count: totalCount },
-    { data: statusRows },
-    { data: recentRestaurants },
-  ] = await Promise.all([
-    supabase
-      .from('restaurants')
-      .select('*', { count: 'exact', head: true }),
-
-    supabase
-      .from('restaurants')
-      .select('lead_status')
-      .range(0, 9999),
-
-    supabase
-      .from('restaurants')
-      .select('id, restaurant_name, owner_name, lead_status, assigned_to_name, updated_at')
-      .order('updated_at', { ascending: false, nullsFirst: false })
-      .limit(10),
-  ])
+  const [{ count: totalCount }, { data: statusRows }, { data: recentRestaurants }] =
+    await Promise.all([
+      supabase.from('restaurants').select('*', { count: 'exact', head: true }),
+      supabase.from('restaurants').select('lead_status, follow_up_date').range(0, 9999),
+      supabase
+        .from('restaurants')
+        .select('id, restaurant_name, owner_name, lead_status, assigned_to_name, updated_at, follow_up_date')
+        .order('updated_at', { ascending: false, nullsFirst: false })
+        .limit(10),
+    ])
 
   const leads = (statusRows || []) as LeadRow[]
   const restaurants = (recentRestaurants || []) as RecentRestaurant[]
+  const today = new Date().toISOString().slice(0, 10)
 
-  const countByStatus = (status: string) =>
-    leads.filter((x) => (x.lead_status || '').toLowerCase() === status.toLowerCase()).length
-
-  const negotiationCount = leads.filter((x) =>
-    ['qualified', 'proposal sent', 'negotiation'].includes(
-      (x.lead_status || '').toLowerCase()
-    )
-  ).length
-
-  const wonCount = leads.filter((x) =>
-    ['won', 'converted'].includes((x.lead_status || '').toLowerCase())
-  ).length
+  const agreedCount = leads.filter((x) => (x.lead_status || '').toLowerCase() === 'agreed').length
+  const followupCount = leads.filter((x) => (x.lead_status || '').toLowerCase() === 'followup').length
+  const convertedCount = leads.filter((x) => (x.lead_status || '').toLowerCase() === 'converted').length
+  const dueTodayCount = leads.filter((x) => x.follow_up_date === today).length
+  const overdueCount = leads.filter((x) => x.follow_up_date && x.follow_up_date < today).length
+  const upcomingCount = leads.filter((x) => x.follow_up_date && x.follow_up_date > today).length
 
   return (
     <div className="space-y-6">
@@ -101,7 +88,7 @@ export default async function DashboardPage() {
             Dashboard
           </h1>
           <p className="mt-2 text-sm text-slate-500">
-            Sales pipeline overview and CRM activity snapshot
+            Sales pipeline overview and follow-up snapshot
           </p>
         </div>
 
@@ -115,12 +102,47 @@ export default async function DashboardPage() {
         </form>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <MetricCard title="Total Leads" value={totalCount || 0} accent="bg-slate-900" />
-        <MetricCard title="Contacted" value={countByStatus('Contacted')} accent="bg-blue-500" />
-        <MetricCard title="Negotiation" value={negotiationCount} accent="bg-violet-500" />
-        <MetricCard title="Won" value={wonCount} accent="bg-emerald-500" />
-        <MetricCard title="Lost" value={countByStatus('Lost')} accent="bg-rose-500" />
+        <MetricCard title="Agreed" value={agreedCount} accent="bg-emerald-500" />
+        <MetricCard title="Followup" value={followupCount} accent="bg-blue-500" />
+        <MetricCard title="Converted" value={convertedCount} accent="bg-green-500" />
+        <MetricCard title="Due Today" value={dueTodayCount} accent="bg-amber-500" />
+        <MetricCard title="Overdue" value={overdueCount} accent="bg-rose-500" />
+      </div>
+
+      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold text-slate-900">Follow-up Snapshot</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Quick visibility into next action buckets
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Due Today
+            </div>
+            <div className="mt-3 text-3xl font-semibold text-slate-900">{dueTodayCount}</div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Overdue
+            </div>
+            <div className="mt-3 text-3xl font-semibold text-slate-900">{overdueCount}</div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Upcoming
+            </div>
+            <div className="mt-3 text-3xl font-semibold text-slate-900">{upcomingCount}</div>
+          </div>
+        </div>
       </div>
 
       <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -141,11 +163,12 @@ export default async function DashboardPage() {
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-slate-200">
-          <div className="grid grid-cols-5 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="grid grid-cols-6 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <div>Restaurant</div>
             <div>Owner</div>
             <div>Status</div>
             <div>Assigned To</div>
+            <div>Follow-up</div>
             <div>Updated</div>
           </div>
 
@@ -153,12 +176,13 @@ export default async function DashboardPage() {
             restaurants.map((r) => (
               <div
                 key={r.id}
-                className="grid grid-cols-5 border-b border-slate-100 px-5 py-4 text-sm text-slate-700"
+                className="grid grid-cols-6 border-b border-slate-100 px-5 py-4 text-sm text-slate-700"
               >
                 <div className="font-medium text-slate-900">{r.restaurant_name || '—'}</div>
                 <div>{r.owner_name || '—'}</div>
                 <div>{r.lead_status || '—'}</div>
                 <div>{r.assigned_to_name || '—'}</div>
+                <div>{r.follow_up_date || '—'}</div>
                 <div>{timeAgo(r.updated_at)}</div>
               </div>
             ))
