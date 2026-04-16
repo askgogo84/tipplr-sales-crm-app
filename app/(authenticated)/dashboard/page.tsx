@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import Link from 'next/link'
 import SyncButton from './SyncButton'
 import StatusPill from '@/components/StatusPill'
 import StaleBadge from '@/components/StaleBadge'
@@ -94,7 +95,6 @@ export default async function DashboardPage() {
             Sales pipeline overview and follow-up snapshot
           </p>
         </div>
-
         <SyncButton />
       </div>
 
@@ -116,26 +116,17 @@ export default async function DashboardPage() {
             </p>
           </div>
         </div>
-
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Due Today
-            </div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Due Today</div>
             <div className="mt-3 text-3xl font-semibold text-slate-900">{dueTodayCount}</div>
           </div>
-
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Overdue
-            </div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Overdue</div>
             <div className="mt-3 text-3xl font-semibold text-slate-900">{overdueCount}</div>
           </div>
-
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Upcoming
-            </div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Upcoming</div>
             <div className="mt-3 text-3xl font-semibold text-slate-900">{upcomingCount}</div>
           </div>
         </div>
@@ -145,20 +136,13 @@ export default async function DashboardPage() {
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h2 className="text-xl sm:text-2xl font-semibold text-slate-900">Recently Updated</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Last 10 restaurants modified
-            </p>
+            <p className="mt-1 text-sm text-slate-500">Last 10 restaurants modified</p>
           </div>
-
-          
-            href="/restaurants"
-            className="text-sm font-medium text-slate-700 hover:text-slate-900"
-          >
+          <Link href="/restaurants" className="text-sm font-medium text-slate-700 hover:text-slate-900">
             View all →
-          </a>
+          </Link>
         </div>
 
-        {/* Desktop view - table */}
         <div className="hidden md:block overflow-hidden rounded-2xl border border-slate-200">
           <div className="grid grid-cols-6 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <div>Restaurant</div>
@@ -168,75 +152,57 @@ export default async function DashboardPage() {
             <div>Follow-up</div>
             <div>Updated</div>
           </div>
-
           {restaurants.length > 0 ? (
             restaurants.map((r) => (
-              
+              <Link
                 key={r.id}
                 href={`/restaurants/${r.id}`}
                 className="grid grid-cols-6 border-b border-slate-100 px-5 py-4 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
               >
-                <div className="font-medium text-slate-900 truncate pr-2">
-                  {r.restaurant_name || '—'}
-                </div>
+                <div className="font-medium text-slate-900 truncate pr-2">{r.restaurant_name || '—'}</div>
                 <div className="truncate pr-2">{r.owner_name || '—'}</div>
-                <div>
-                  <StatusPill status={r.lead_status} size="sm" />
-                </div>
+                <div><StatusPill status={r.lead_status} size="sm" /></div>
                 <div className="truncate pr-2">{r.assigned_to_name || '—'}</div>
                 <div>{r.follow_up_date || '—'}</div>
                 <div className="flex items-center gap-2">
                   <span className="text-slate-500">{timeAgo(r.updated_at)}</span>
                   <StaleBadge updatedAt={r.updated_at} status={r.lead_status} />
                 </div>
-              </a>
+              </Link>
             ))
           ) : (
-            <div className="px-5 py-10 text-center text-sm text-slate-500">
-              No restaurant data found
-            </div>
+            <div className="px-5 py-10 text-center text-sm text-slate-500">No restaurant data found</div>
           )}
         </div>
 
-        {/* Mobile view - cards */}
         <div className="md:hidden space-y-3">
           {restaurants.length > 0 ? (
             restaurants.map((r) => (
-              
+              <Link
                 key={r.id}
                 href={`/restaurants/${r.id}`}
                 className="block rounded-2xl border border-slate-200 bg-white p-4 hover:bg-slate-50 active:bg-slate-100 transition-colors"
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-slate-900 truncate">
-                      {r.restaurant_name || '—'}
-                    </div>
+                    <div className="font-semibold text-slate-900 truncate">{r.restaurant_name || '—'}</div>
                     {r.owner_name && (
-                      <div className="text-xs text-slate-500 truncate mt-0.5">
-                        {r.owner_name}
-                      </div>
+                      <div className="text-xs text-slate-500 truncate mt-0.5">{r.owner_name}</div>
                     )}
                   </div>
                   <StaleBadge updatedAt={r.updated_at} status={r.lead_status} />
                 </div>
-
                 <div className="flex items-center justify-between gap-2">
                   <StatusPill status={r.lead_status} size="sm" />
-                  <span className="text-xs text-slate-500">
-                    {timeAgo(r.updated_at)}
-                  </span>
+                  <span className="text-xs text-slate-500">{timeAgo(r.updated_at)}</span>
                 </div>
-
                 <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-slate-100 text-xs text-slate-600">
                   <span className="truncate">
                     {r.assigned_to_name ? `👤 ${r.assigned_to_name}` : 'Unassigned'}
                   </span>
-                  {r.follow_up_date && (
-                    <span>📅 {r.follow_up_date}</span>
-                  )}
+                  {r.follow_up_date && <span>📅 {r.follow_up_date}</span>}
                 </div>
-              </a>
+              </Link>
             ))
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500">
