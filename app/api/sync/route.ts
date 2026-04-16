@@ -17,6 +17,33 @@ function normalizeBoolean(value: string | null | undefined): boolean | null {
   return null
 }
 
+function getGoogleCredentials() {
+  const envJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+
+  if (envJson) {
+    try {
+      const parsed = JSON.parse(envJson)
+      return parsed
+    } catch (error) {
+      throw new Error('Invalid GOOGLE_SERVICE_ACCOUNT_JSON in environment')
+    }
+  }
+
+  function getGoogleCredentials() {
+  const envJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+
+  if (!envJson) {
+    throw new Error('Missing GOOGLE_SERVICE_ACCOUNT_JSON in environment')
+  }
+
+  try {
+    return JSON.parse(envJson)
+  } catch (error) {
+    throw new Error('Invalid GOOGLE_SERVICE_ACCOUNT_JSON format')
+  }
+}
+
+
 export async function GET() {
   try {
     if (!process.env.GOOGLE_SHEET_ID) {
@@ -40,20 +67,10 @@ export async function GET() {
       )
     }
 
-    const keyFile = path.join(process.cwd(), 'google-service-account.json')
-
-    if (!fs.existsSync(keyFile)) {
-      return Response.json(
-        {
-          success: false,
-          error: `Missing google-service-account.json at ${keyFile}`,
-        },
-        { status: 500 }
-      )
-    }
+    const credentials = getGoogleCredentials()
 
     const auth = new google.auth.GoogleAuth({
-      keyFile,
+      credentials,
       scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
     })
 
@@ -135,7 +152,6 @@ export async function GET() {
         const designation = clean(record['Designation'])
         const contact_no = clean(record['Contact No'])
         const zomato_page_number = clean(record['Zomato Page Number'])
-        const contacted = clean(record['Contacted'])
         const tipplr_executive_name = clean(record['Tipplr Executive Name'])
         const approached_on = clean(record['Approached On'])
         const converted = clean(record['Converted'])
@@ -152,12 +168,9 @@ export async function GET() {
           clean(record['Reason'])
         const remarks = clean(record['Remarks (if any)'])
 
-        let lead_status = 'Lead'
-        if (converted?.toLowerCase() === 'yes') {
-          lead_status = 'Converted'
-        } else if (contacted?.toLowerCase() === 'yes') {
-          lead_status = 'Contacted'
-        }
+        // IMPORTANT: status comes directly from sheet column F / header "Status"
+        const sheetStatus = clean(record['Status'])
+        const lead_status = sheetStatus || 'Lead'
 
         const remarksParts = [
           remarks,

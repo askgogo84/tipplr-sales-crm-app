@@ -269,14 +269,19 @@ export default function RestaurantsPage() {
                   onChange={(e) => handleStatusChange(e.target.value)}
                   className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
                 >
-                  <option value="">All statuses</option>
-                  <option value="Lead">Lead</option>
-                  <option value="Contacted">Contacted</option>
-                  <option value="Qualified">Qualified</option>
-                  <option value="Proposal Sent">Proposal Sent</option>
-                  <option value="Won">Won</option>
-                  <option value="Converted">Converted</option>
-                  <option value="Lost">Lost</option>
+                 <option value="">All statuses</option>
+<option value="Agreed">Agreed</option>
+<option value="Not Interested">Not Interested</option>
+<option value="Visit">Visit</option>
+<option value="Incorrect Number">Incorrect Number</option>
+<option value="Couldn't Connect">Couldn't Connect</option>
+<option value="Call Back">Call Back</option>
+<option value="Wrong Number">Wrong Number</option>
+<option value="Invalid Number">Invalid Number</option>
+<option value="Temporarily Closed">Temporarily Closed</option>
+<option value="Permanently Closed">Permanently Closed</option>
+<option value="Followup">Followup</option>
+<option value="Converted">Converted</option>
                 </select>
               </div>
 
