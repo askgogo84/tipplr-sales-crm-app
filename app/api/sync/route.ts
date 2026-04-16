@@ -1,7 +1,5 @@
 import { google } from 'googleapis'
 import { createClient } from '@supabase/supabase-js'
-import fs from 'fs'
-import path from 'path'
 
 function clean(value: unknown): string | null {
   if (value === undefined || value === null) return null
@@ -20,29 +18,16 @@ function normalizeBoolean(value: string | null | undefined): boolean | null {
 function getGoogleCredentials() {
   const envJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
 
-  if (envJson) {
-    try {
-      const parsed = JSON.parse(envJson)
-      return parsed
-    } catch (error) {
-      throw new Error('Invalid GOOGLE_SERVICE_ACCOUNT_JSON in environment')
-    }
-  }
-
-  function getGoogleCredentials() {
-  const envJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
-
   if (!envJson) {
     throw new Error('Missing GOOGLE_SERVICE_ACCOUNT_JSON in environment')
   }
 
   try {
     return JSON.parse(envJson)
-  } catch (error) {
+  } catch {
     throw new Error('Invalid GOOGLE_SERVICE_ACCOUNT_JSON format')
   }
 }
-
 
 export async function GET() {
   try {
@@ -168,7 +153,6 @@ export async function GET() {
           clean(record['Reason'])
         const remarks = clean(record['Remarks (if any)'])
 
-        // IMPORTANT: status comes directly from sheet column F / header "Status"
         const sheetStatus = clean(record['Status'])
         const lead_status = sheetStatus || 'Lead'
 
@@ -205,7 +189,9 @@ export async function GET() {
           .eq('source_row_number', source_row_number)
           .maybeSingle()
 
-        if (existing.error) throw new Error(existing.error.message)
+        if (existing.error) {
+          throw new Error(existing.error.message)
+        }
 
         if (existing.data?.id) {
           const { error } = await supabase
