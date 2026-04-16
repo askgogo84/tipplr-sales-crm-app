@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import SyncButton from './SyncButton'
-import StatusPill from '@/app/components/StatusPill'
-import StaleBadge from '@/app/components/StaleBadge'
+import StatusPill from '@/components/StatusPill'
+import StaleBadge from '@/components/StaleBadge'
 
 type LeadRow = {
   lead_status: string | null
