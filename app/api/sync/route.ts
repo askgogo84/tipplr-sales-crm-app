@@ -1,6 +1,8 @@
 import { google } from 'googleapis'
 import { createClient } from '@supabase/supabase-js'
 
+export const maxDuration = 300
+
 function clean(value: unknown): string | null {
   if (value === undefined || value === null) return null
   const s = String(value).trim()
@@ -27,6 +29,14 @@ function getGoogleCredentials() {
   } catch {
     throw new Error('Invalid GOOGLE_SERVICE_ACCOUNT_JSON format')
   }
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size))
+  }
+  return chunks
 }
 
 export async function GET() {
@@ -85,11 +95,6 @@ export async function GET() {
         {
           success: false,
           error: `Could not find sheet tab for gid ${targetGid}`,
-          availableSheets:
-            meta.data.sheets?.map((s) => ({
-              title: s.properties?.title,
-              gid: s.properties?.sheetId,
-            })) || [],
         },
         { status: 500 }
       )
@@ -116,8 +121,8 @@ export async function GET() {
     const headers = rows[0].map((h) => String(h).trim())
     const dataRows = rows.slice(1)
 
-    let synced = 0
-    const errors: Array<{ row: number; error: string }> = []
+    const payloads: any[] = []
+    const rowErrors: Array<{ row: number; error: string }> = []
 
     for (let index = 0; index < dataRows.length; index++) {
       const row = dataRows[index]
@@ -163,7 +168,7 @@ export async function GET() {
           approached_on ? `Approached On: ${approached_on}` : null,
         ].filter(Boolean)
 
-        const payload = {
+        payloads.push({
           restaurant_name,
           owner_name: brand_contact_person || null,
           phone: contact_no || null,
@@ -181,49 +186,42 @@ export async function GET() {
           reason: reason || null,
           source_row_number,
           updated_at: new Date().toISOString(),
-        }
-
-        const existing = await supabase
-          .from('restaurants')
-          .select('id')
-          .eq('source_row_number', source_row_number)
-          .maybeSingle()
-
-        if (existing.error) {
-          throw new Error(existing.error.message)
-        }
-
-        if (existing.data?.id) {
-          const { error } = await supabase
-            .from('restaurants')
-            .update(payload)
-            .eq('id', existing.data.id)
-
-          if (error) throw new Error(error.message)
-        } else {
-          const { error } = await supabase
-            .from('restaurants')
-            .insert(payload)
-
-          if (error) throw new Error(error.message)
-        }
-
-        synced++
+        })
       } catch (err) {
-        errors.push({
+        rowErrors.push({
           row: source_row_number,
           error: err instanceof Error ? err.message : 'Unknown error',
         })
       }
     }
 
+    const chunks = chunkArray(payloads, 500)
+    const batchErrors: Array<{ batch: number; error: string }> = []
+
+    for (let i = 0; i < chunks.length; i++) {
+      const { error } = await supabase
+        .from('restaurants')
+        .upsert(chunks[i], {
+          onConflict: 'source_row_number',
+          ignoreDuplicates: false,
+        })
+
+      if (error) {
+        batchErrors.push({
+          batch: i + 1,
+          error: error.message,
+        })
+      }
+    }
+
     return Response.json({
-      success: true,
+      success: batchErrors.length === 0,
       sheet: sheetTitle,
       gid: targetGid,
-      synced,
+      synced: payloads.length,
       totalRows: dataRows.length,
-      errors,
+      rowErrors,
+      batchErrors,
     })
   } catch (err) {
     console.error('SYNC ROUTE ERROR:', err)
