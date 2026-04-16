@@ -64,6 +64,19 @@ function getStatusClasses(status: string | null) {
   }
 }
 
+function cleanPhoneForActions(phone: string | null) {
+  if (!phone) return null
+  const cleaned = phone.replace(/\D/g, '')
+  if (cleaned.length === 10) return { tel: `+91${cleaned}`, wa: `91${cleaned}`, display: cleaned }
+  if (cleaned.length === 12 && cleaned.startsWith('91')) return { tel: `+${cleaned}`, wa: cleaned, display: cleaned.slice(2) }
+  if (cleaned.length === 11 && cleaned.startsWith('0')) {
+    const w = cleaned.slice(1)
+    return { tel: `+91${w}`, wa: `91${w}`, display: w }
+  }
+  if (cleaned.length >= 7) return { tel: cleaned, wa: cleaned, display: cleaned }
+  return null
+}
+
 export default function RestaurantDetailPanel({
   restaurant,
   open = true,
@@ -76,6 +89,8 @@ export default function RestaurantDetailPanel({
   const [saving, setSaving] = useState(false)
   const [activities, setActivities] = useState<ActivityItem[]>([])
   const [loadingActivities, setLoadingActivities] = useState(false)
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [showActivityMobile, setShowActivityMobile] = useState(false)
 
   const mergedExecutives: Executive[] =
     executives.length > 0
@@ -96,6 +111,42 @@ export default function RestaurantDetailPanel({
       loadActivities(restaurant.id)
     }
   }, [restaurant?.id, open])
+
+  // Body scroll lock while modal is open
+  useEffect(() => {
+    if (!open) return
+    const originalOverflow = document.body.style.overflow
+    const originalPosition = document.body.style.position
+    const scrollY = window.scrollY
+    document.body.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.width = '100%'
+    document.body.style.top = `-${scrollY}px`
+    return () => {
+      document.body.style.overflow = originalOverflow
+      document.body.style.position = originalPosition
+      document.body.style.width = ''
+      document.body.style.top = ''
+      window.scrollTo(0, scrollY)
+    }
+  }, [open])
+
+  // Escape key closes modal
+  useEffect(() => {
+    if (!open) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 3500)
+    return () => clearTimeout(t)
+  }, [toast])
 
   async function loadActivities(restaurantId: string) {
     try {
@@ -136,9 +187,7 @@ export default function RestaurantDetailPanel({
 
       const res = await fetch(`/api/restaurants/${restaurant.id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           restaurant_name: form.restaurant_name,
           owner_name: form.owner_name,
@@ -154,17 +203,17 @@ export default function RestaurantDetailPanel({
       const data = await res.json()
 
       if (!res.ok) {
-        alert(data.error || 'Failed to save restaurant')
+        setToast({ type: 'error', msg: data.error || 'Failed to save' })
         return
       }
 
       setForm(data.restaurant)
       await loadActivities(restaurant.id)
       onSaved?.()
-      alert('Restaurant updated successfully')
+      setToast({ type: 'success', msg: 'Changes saved' })
     } catch (error) {
       console.error(error)
-      alert('Something went wrong while saving')
+      setToast({ type: 'error', msg: 'Something went wrong' })
     } finally {
       setSaving(false)
     }
@@ -172,224 +221,251 @@ export default function RestaurantDetailPanel({
 
   if (!open || !form) return null
 
+  const phoneActions = cleanPhoneForActions(form.phone)
+
   return (
-    <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
 
-      <div className="absolute right-0 top-0 h-full w-full max-w-5xl bg-white shadow-2xl">
-        <div className="grid h-full grid-cols-1 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="flex h-full flex-col">
-            <div className="border-b border-slate-200 px-8 py-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="mb-3 flex items-center gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-lg font-semibold text-white">
-                      {(form.restaurant_name || 'R').charAt(0).toUpperCase()}
-                    </div>
-
-                    <div>
-                      <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
-                        {form.restaurant_name || 'Restaurant Details'}
-                      </h2>
-                      <p className="text-sm text-slate-500">
-                        Edit restaurant info, assignee, and remarks
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <span
-                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getStatusClasses(
-                        form.lead_status
-                      )}`}
-                    >
-                      {form.lead_status || 'Unknown'}
-                    </span>
-
-                    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-                      {form.assigned_to_name || 'Unassigned'}
-                    </span>
-                  </div>
+      {/* Modal container — full screen on mobile, side panel on desktop */}
+      <div
+        className="relative ml-auto h-full w-full sm:max-w-5xl bg-white shadow-2xl flex flex-col"
+        style={{ maxHeight: '100dvh' }}
+      >
+        {/* HEADER — always visible, non-scrolling */}
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white">
+          <div className="px-4 sm:px-8 py-4 sm:py-6">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0 flex-1">
+                <div className="flex h-10 w-10 sm:h-12 sm:w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-base sm:text-lg font-semibold text-white">
+                  {(form.restaurant_name || 'R').charAt(0).toUpperCase()}
                 </div>
-
-                <button
-                  onClick={onClose}
-                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                  Close
-                </button>
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-lg sm:text-2xl font-semibold tracking-tight text-slate-900 truncate">
+                    {form.restaurant_name || 'Restaurant Details'}
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-500 truncate">
+                    Edit info, assignee, and remarks
+                  </p>
+                </div>
               </div>
+
+              <button
+                onClick={onClose}
+                aria-label="Close"
+                className="flex-shrink-0 flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center sm:px-4 sm:py-2 rounded-2xl border border-slate-200 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                <span className="sm:hidden text-lg leading-none">✕</span>
+                <span className="hidden sm:inline">Close</span>
+              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-8 py-6">
-              <div className="grid grid-cols-1 gap-5">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Restaurant Name
-                  </label>
-                  <input
-                    value={form.restaurant_name || ''}
-                    onChange={(e) =>
-                      setForm({ ...form, restaurant_name: e.target.value })
-                    }
-                    className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Owner Name
-                  </label>
-                  <input
-                    value={form.owner_name || ''}
-                    onChange={(e) =>
-                      setForm({ ...form, owner_name: e.target.value })
-                    }
-                    className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Phone
-                  </label>
-                  <input
-                    value={form.phone || ''}
-                    onChange={(e) =>
-                      setForm({ ...form, phone: e.target.value })
-                    }
-                    className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">
-                      City
-                    </label>
-                    <input
-                      value={form.city || ''}
-                      onChange={(e) =>
-                        setForm({ ...form, city: e.target.value })
-                      }
-                      className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">
-                      Area
-                    </label>
-                    <input
-                      value={form.area || ''}
-                      onChange={(e) =>
-                        setForm({ ...form, area: e.target.value })
-                      }
-                      className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">
-                      Lead Status
-                    </label>
-                    <select
-                      value={form.lead_status || ''}
-                      onChange={(e) =>
-                        setForm({ ...form, lead_status: e.target.value })
-                      }
-                      className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                    >
-                      {[
-  'Agreed',
-  'Not Interested',
-  'Visit',
-  'Incorrect Number',
-  "Couldn't Connect",
-  'Call Back',
-  'Wrong Number',
-  'Invalid Number',
-  'Temporarily Closed',
-  'Permanently Closed',
-  'Followup',
-  'Converted',
-].map((status) => (
-  <option key={status} value={status}>
-    {status}
-  </option>
-))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">
-                      Assignee
-                    </label>
-                    <select
-                      value={form.assigned_to_name || ''}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          assigned_to_name: e.target.value || null,
-                        })
-                      }
-                      className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                    >
-                      <option value="">Unassigned</option>
-                      {mergedExecutives.map((exec) => (
-                        <option key={exec.id} value={exec.full_name}>
-                          {exec.full_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Remarks
-                  </label>
-                  <textarea
-                    rows={7}
-                    value={form.remarks || ''}
-                    onChange={(e) =>
-                      setForm({ ...form, remarks: e.target.value })
-                    }
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                    placeholder="Add notes, follow-up context, call summary..."
-                  />
-                </div>
-              </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span
+                className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getStatusClasses(
+                  form.lead_status
+                )}`}
+              >
+                {form.lead_status || 'Unknown'}
+              </span>
+              <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                {form.assigned_to_name || 'Unassigned'}
+              </span>
+              {activities.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowActivityMobile(!showActivityMobile)}
+                  className="lg:hidden inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600"
+                >
+                  {showActivityMobile ? 'Hide' : 'Show'} activity ({activities.length})
+                </button>
+              )}
             </div>
 
-            <div className="border-t border-slate-200 px-8 py-5">
-              <div className="flex items-center justify-end gap-3">
-                <button
-                  onClick={onClose}
-                  className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            {/* Quick-action row: Call + WhatsApp */}
+            {phoneActions && (
+              <div className="mt-3 flex gap-2">
+                
+                  href={`tel:${phoneActions.tel}`}
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-100 active:bg-blue-200 transition-colors"
                 >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={handleSave}
-                  disabled={!hasChanges || saving}
-                  className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                  </svg>
+                  Call
+                </a>
+                
+                  href={`https://wa.me/${phoneActions.wa}?text=${encodeURIComponent(
+                    `Hi${form.owner_name ? ' ' + form.owner_name : ''}, this is from Tipplr. Do you have a moment to discuss partnering with us${form.restaurant_name ? ' for ' + form.restaurant_name : ''}?`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-medium text-green-700 hover:bg-green-100 active:bg-green-200 transition-colors"
                 >
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.693.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884" />
+                  </svg>
+                  WhatsApp
+                </a>
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* BODY — scrollable */}
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] overflow-hidden">
+          {/* Form column — scrolls independently */}
+          <div
+            className={`overflow-y-auto px-4 sm:px-8 py-5 ${
+              showActivityMobile ? 'hidden lg:block' : 'block'
+            }`}
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Restaurant Name
+                </label>
+                <input
+                  value={form.restaurant_name || ''}
+                  onChange={(e) => setForm({ ...form, restaurant_name: e.target.value })}
+                  className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Owner Name
+                </label>
+                <input
+                  value={form.owner_name || ''}
+                  onChange={(e) => setForm({ ...form, owner_name: e.target.value })}
+                  className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Phone
+                </label>
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  value={form.phone || ''}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    City
+                  </label>
+                  <input
+                    value={form.city || ''}
+                    onChange={(e) => setForm({ ...form, city: e.target.value })}
+                    className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Area
+                  </label>
+                  <input
+                    value={form.area || ''}
+                    onChange={(e) => setForm({ ...form, area: e.target.value })}
+                    className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Lead Status
+                  </label>
+                  <select
+                    value={form.lead_status || ''}
+                    onChange={(e) => setForm({ ...form, lead_status: e.target.value })}
+                    className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                  >
+                    {[
+                      'Agreed',
+                      'Not Interested',
+                      'Visit',
+                      'Incorrect Number',
+                      "Couldn't Connect",
+                      'Call Back',
+                      'Wrong Number',
+                      'Invalid Number',
+                      'Temporarily Closed',
+                      'Permanently Closed',
+                      'Followup',
+                      'Converted',
+                    ].map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Assignee
+                  </label>
+                  <select
+                    value={form.assigned_to_name || ''}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        assigned_to_name: e.target.value || null,
+                      })
+                    }
+                    className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                  >
+                    <option value="">Unassigned</option>
+                    {mergedExecutives.map((exec) => (
+                      <option key={exec.id} value={exec.full_name}>
+                        {exec.full_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Remarks
+                </label>
+                <textarea
+                  rows={6}
+                  value={form.remarks || ''}
+                  onChange={(e) => setForm({ ...form, remarks: e.target.value })}
+                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                  placeholder="Add notes, follow-up context, call summary..."
+                />
+              </div>
+
+              <div className="h-4" />
             </div>
           </div>
 
-          <div className="border-l border-slate-200 bg-slate-50 px-6 py-6">
+          {/* Activity column — scrolls independently on desktop, optional on mobile */}
+          <div
+            className={`border-l border-slate-200 bg-slate-50 px-4 sm:px-6 py-5 overflow-y-auto ${
+              showActivityMobile ? 'block' : 'hidden lg:block'
+            }`}
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
               Activity Log
             </h3>
-
-            <div className="mt-5 space-y-3">
+            <div className="mt-4 space-y-3">
               {loadingActivities ? (
                 <div className="text-sm text-slate-500">Loading activity...</div>
               ) : activities.length === 0 ? (
@@ -405,19 +481,16 @@ export default function RestaurantDetailPanel({
                     <div className="text-sm font-semibold text-slate-900">
                       {item.action_type}
                     </div>
-
                     {item.field_name && (
                       <div className="mt-1 text-sm text-slate-600">
                         Field: {item.field_name}
                       </div>
                     )}
-
                     {(item.old_value || item.new_value) && (
-                      <div className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      <div className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700 break-words">
                         {item.old_value || '—'} → {item.new_value || '—'}
                       </div>
                     )}
-
                     <div className="mt-3 text-xs text-slate-400">
                       {new Date(item.created_at).toLocaleString()}
                       {item.actor_name ? ` • ${item.actor_name}` : ''}
@@ -428,6 +501,41 @@ export default function RestaurantDetailPanel({
             </div>
           </div>
         </div>
+
+        {/* FOOTER — always visible */}
+        <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 sm:px-8 py-4">
+          <div className="flex items-center justify-end gap-3">
+            <button
+              onClick={onClose}
+              className="rounded-2xl border border-slate-200 px-4 sm:px-5 py-2.5 sm:py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!hasChanges || saving}
+              className="rounded-2xl bg-slate-900 px-4 sm:px-5 py-2.5 sm:py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+
+        {/* Toast */}
+        {toast && (
+          <div
+            className={`fixed bottom-24 sm:bottom-6 left-1/2 -translate-x-1/2 sm:left-auto sm:right-6 sm:translate-x-0 max-w-sm px-4 py-3 rounded-lg shadow-lg z-[60] ${
+              toast.type === 'success'
+                ? 'bg-green-50 border border-green-200 text-green-800'
+                : 'bg-red-50 border border-red-200 text-red-800'
+            }`}
+          >
+            <div className="font-medium flex items-center gap-2">
+              <span>{toast.type === 'success' ? '✓' : '✕'}</span>
+              <span>{toast.msg}</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
