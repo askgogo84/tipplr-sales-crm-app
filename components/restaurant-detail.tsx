@@ -2,24 +2,8 @@
 
 import { useState } from 'react'
 
-type Restaurant = {
+type Restaurant = Record<string, any> & {
   id: string
-  restaurant_name: string | null
-  owner_name: string | null
-  phone: string | null
-  city: string | null
-  area: string | null
-  lead_status: string | null
-  assigned_to_name: string | null
-  follow_up_date: string | null
-  remarks: string | null
-  priority: string | null
-  converted: boolean | null
-  documents_received: boolean | null
-  go_live_date: string | null
-  menu_pricing: string | null
-  reason: string | null
-  [key: string]: any
 }
 
 type Executive = {
