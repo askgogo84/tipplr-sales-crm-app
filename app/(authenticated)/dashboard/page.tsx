@@ -210,6 +210,30 @@ export default async function DashboardPage() {
         <SyncButton />
       </div>
 
+      {/* TOTAL RESTAURANTS — prominent standalone card */}
+      <Link href="/restaurants" className="block">
+        <div className="overflow-hidden rounded-2xl sm:rounded-[28px] border border-slate-200 bg-white shadow-sm hover:shadow-md transition active:scale-[0.99]">
+          <div className="h-1.5 w-full bg-slate-800" />
+          <div className="flex items-center justify-between px-5 py-4 sm:px-8 sm:py-6">
+            <div>
+              <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-widest text-slate-500">
+                Total Restaurants in CRM
+              </div>
+              <div className="mt-1 text-4xl sm:text-6xl font-bold tracking-tight text-slate-900">
+                {totalCount || 0}
+              </div>
+              <div className="mt-1 text-xs sm:text-sm text-slate-500">
+                {conversionRate}% overall conversion rate · tap to view all
+              </div>
+            </div>
+            <div className="hidden sm:flex flex-col items-end gap-2">
+              <div className="text-2xl font-bold text-emerald-600">{agreedCount + convertedCount}</div>
+              <div className="text-xs text-slate-500">Agreed + Converted</div>
+            </div>
+          </div>
+        </div>
+      </Link>
+
       {/* TODAY'S FOCUS */}
       <div>
         <h2 className="text-xs sm:text-sm font-semibold uppercase tracking-wide text-slate-500 mb-2 sm:mb-3 px-1">
@@ -251,7 +275,7 @@ export default async function DashboardPage() {
             Pipeline Overview
           </h2>
           <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            {totalCount || 0} total leads · {conversionRate}% conversion rate
+            Status breakdown across all {totalCount || 0} restaurants
           </p>
         </div>
 
