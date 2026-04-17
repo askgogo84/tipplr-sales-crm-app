@@ -20,7 +20,7 @@ const NAV_MAIN = [
     label: 'Restaurants', href: '/restaurants',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-[18px] h-[18px]">
-        <path d="M3 3h18v18H3z" rx="2" />
+        <path d="M3 3h18v18H3z" />
         <path d="M3 9h18M9 3v18" />
       </svg>
     ),
@@ -40,7 +40,6 @@ const NAV_MAIN = [
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-[18px] h-[18px]">
         <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
         <circle cx="9" cy="7" r="4" />
-        <path d="M23 21v-2a4 4 0 00-3-3.87" />
         <path d="M19 8l2 2 4-4" />
       </svg>
     ),
@@ -90,27 +89,13 @@ export default function Sidebar({ userName, userRole }: { userName?: string; use
         key={item.href}
         href={item.href}
         onClick={() => setMobileOpen(false)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '10px 14px',
-          borderRadius: 10,
-          color: active ? '#FFFFFF' : '#C8C2B8',
-          background: active ? 'var(--bg-sidebar-active)' : 'transparent',
-          textDecoration: 'none',
-          fontSize: 14,
-          fontWeight: active ? 600 : 450,
-          transition: 'all 0.15s ease',
-        }}
-        onMouseEnter={(e) => {
-          if (!active) e.currentTarget.style.background = 'var(--bg-sidebar-hover)'
-        }}
-        onMouseLeave={(e) => {
-          if (!active) e.currentTarget.style.background = 'transparent'
-        }}
+        className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-150 ${
+          active
+            ? 'bg-[#35302A] text-white font-semibold'
+            : 'text-[#C8C2B8] hover:bg-[#2A2620] hover:text-[#E8E4DE] font-normal'
+        }`}
       >
-        <span style={{ opacity: active ? 1 : 0.7 }}>{item.icon}</span>
+        <span className={active ? 'opacity-100' : 'opacity-70'}>{item.icon}</span>
         {item.label}
       </Link>
     )
@@ -118,17 +103,11 @@ export default function Sidebar({ userName, userRole }: { userName?: string; use
 
   return (
     <>
+      {/* Mobile hamburger */}
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
-        style={{
-          display: 'none', position: 'fixed',
-          top: 16, left: 16, zIndex: 200,
-          width: 42, height: 42, borderRadius: 10,
-          background: 'var(--bg-sidebar)', color: '#fff',
-          border: 'none', cursor: 'pointer',
-          alignItems: 'center', justifyContent: 'center',
-        }}
-        className="mobile-menu-btn"
+        className="mobile-menu-btn fixed top-4 left-4 z-[200] w-10 h-10 rounded-xl items-center justify-center border-0 cursor-pointer"
+        style={{ display: 'none', background: '#1A1814', color: '#fff' }}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           {mobileOpen ? (
@@ -139,63 +118,67 @@ export default function Sidebar({ userName, userRole }: { userName?: string; use
         </svg>
       </button>
 
+      {/* Mobile overlay */}
       {mobileOpen && (
-        <div onClick={() => setMobileOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 299 }} className="md:hidden" />
+        <div
+          onClick={() => setMobileOpen(false)}
+          className="fixed inset-0 z-[299] md:hidden"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+        />
       )}
 
+      {/* Sidebar */}
       <aside
+        className={`sidebar-aside flex flex-col h-screen sticky top-0 z-[300] overflow-y-auto ${mobileOpen ? 'mobile-open' : ''}`}
         style={{
-          width: 260, minWidth: 260,
-          background: 'var(--bg-sidebar)',
-          borderRight: '1px solid var(--border-sidebar)',
-          display: 'flex', flexDirection: 'column',
-          height: '100vh', position: 'sticky', top: 0,
-          zIndex: 300,
+          width: 260,
+          minWidth: 260,
+          background: '#1A1814',
+          borderRight: '1px solid #2A2620',
           transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-          overflowY: 'auto',
         }}
-        className={`sidebar-aside ${mobileOpen ? 'mobile-open' : ''}`}
       >
         {/* Brand */}
-        <div style={{ padding: '28px 24px 8px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 38, height: 38, background: 'var(--accent)', borderRadius: 10,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: 'var(--font-display)', fontSize: 20, color: '#fff', fontStyle: 'italic',
-          }}>T</div>
-          <span style={{
-            fontFamily: 'var(--font-display)', fontSize: 22, color: '#fff',
-            fontStyle: 'italic', letterSpacing: '-0.02em',
-          }}>Tipplr</span>
+        <div className="flex items-center gap-3 px-6 pt-7 pb-2">
+          <div
+            className="flex items-center justify-center w-[38px] h-[38px] rounded-xl text-white text-xl"
+            style={{ background: '#E07B39', fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 400 }}
+          >
+            T
+          </div>
+          <span className="text-white text-xl" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', letterSpacing: '-0.02em' }}>
+            Tipplr
+          </span>
         </div>
 
         {/* Main nav */}
-        <div style={{ padding: '24px 24px 8px', fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#5C574E' }}>
+        <div className="px-6 pt-6 pb-2 text-[10.5px] font-semibold uppercase tracking-widest" style={{ color: '#5C574E' }}>
           Main
         </div>
-        <nav style={{ padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <nav className="px-3 flex flex-col gap-0.5">
           {NAV_MAIN.map(renderLink)}
         </nav>
 
         {/* Manage nav */}
-        <div style={{ padding: '24px 24px 8px', fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#5C574E' }}>
+        <div className="px-6 pt-6 pb-2 text-[10.5px] font-semibold uppercase tracking-widest" style={{ color: '#5C574E' }}>
           Manage
         </div>
-        <nav style={{ padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <nav className="px-3 flex flex-col gap-0.5">
           {NAV_MANAGE.map(renderLink)}
         </nav>
 
         {/* User */}
-        <div style={{ marginTop: 'auto', padding: 16, borderTop: '1px solid var(--border-sidebar)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10 }}>
-            <div style={{
-              width: 34, height: 34, borderRadius: 999, background: 'var(--accent)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 13, fontWeight: 600, color: '#fff',
-            }}>{initials}</div>
+        <div className="mt-auto p-4" style={{ borderTop: '1px solid #2A2620' }}>
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
+            <div
+              className="flex-shrink-0 flex items-center justify-center w-[34px] h-[34px] rounded-full text-white text-sm font-semibold"
+              style={{ background: '#E07B39' }}
+            >
+              {initials}
+            </div>
             <div>
-              <div style={{ color: '#fff', fontSize: 13.5, fontWeight: 500 }}>{userName || 'User'}</div>
-              <div style={{ color: '#6B6560', fontSize: 11.5, marginTop: 1 }}>{userRole || 'Admin'}</div>
+              <div className="text-white text-[13.5px] font-medium">{userName || 'User'}</div>
+              <div className="text-[11.5px] mt-0.5" style={{ color: '#6B6560' }}>{userRole || 'Admin'}</div>
             </div>
           </div>
         </div>
@@ -204,8 +187,13 @@ export default function Sidebar({ userName, userRole }: { userName?: string; use
       <style>{`
         @media (max-width: 900px) {
           .mobile-menu-btn { display: flex !important; }
-          .sidebar-aside { position: fixed !important; transform: translateX(-100%); height: 100vh; }
-          .sidebar-aside.mobile-open { transform: translateX(0) !important; }
+          .sidebar-aside {
+            position: fixed !important;
+            transform: translateX(-100%);
+          }
+          .sidebar-aside.mobile-open {
+            transform: translateX(0) !important;
+          }
         }
       `}</style>
     </>
