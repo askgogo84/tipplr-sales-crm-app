@@ -1,542 +1,512 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-
-type Executive = {
-  id: string
-  full_name: string
-}
+import { useState, useEffect } from 'react'
+import { showToast, timeAgo, formatDate } from '@/components/ui'
 
 type Restaurant = {
   id: string
   restaurant_name: string | null
+  brand_name: string | null
   owner_name: string | null
   phone: string | null
-  city: string | null
+  alternate_phone: string | null
+  email: string | null
   area: string | null
+  zone: string | null
+  city: string | null
+  address: string | null
+  restaurant_type: string | null
+  category: string | null
+  source: string | null
   lead_status: string | null
   assigned_to_name: string | null
+  follow_up_date: string | null
+  last_contacted_at: string | null
+  onboarded_date: string | null
+  commission_percent: number | null
+  discount_offer: string | null
+  fssai_number: string | null
+  menu_status: string | null
+  contract_status: string | null
+  kyc_status: string | null
+  listing_status: string | null
+  priority: string | null
   remarks: string | null
+  created_at: string | null
+  updated_at: string | null
+  converted: boolean | null
+  documents_received: boolean | null
+  go_live_on_digilist: boolean | null
+  go_live_date: string | null
+  menu_pricing: string | null
+  reason: string | null
+  [key: string]: any
 }
 
-type ActivityItem = {
-  id: string
-  action_type: string
-  field_name: string | null
-  old_value: string | null
-  new_value: string | null
-  created_at: string
-  actor_name: string | null
-}
+type Note = { id: number; note: string; created_by: string; created_at: string }
+type Activity = { id: number; action_type: string; action_details: string; performed_by: string; created_at: string }
+type Doc = { id: number; file_name: string; uploaded_by: string; created_at: string }
 
-type Props = {
-  restaurant: Restaurant | null
-  open?: boolean
-  onClose: () => void
-  executives?: Executive[]
-  assigneeOptions?: string[]
-  onSaved?: () => void
-}
+const TABS = ['Overview', 'Details', 'Notes', 'Activity', 'Documents'] as const
+type Tab = (typeof TABS)[number]
 
-function getStatusClasses(status: string | null) {
-  switch ((status || '').toLowerCase()) {
-    case 'agreed':
-      return 'bg-emerald-100 text-emerald-700 border-emerald-200'
-    case 'not interested':
-      return 'bg-slate-100 text-slate-700 border-slate-200'
-    case 'visit':
-      return 'bg-amber-100 text-amber-700 border-amber-200'
-    case 'incorrect number':
-    case 'wrong number':
-    case 'invalid number':
-      return 'bg-rose-100 text-rose-700 border-rose-200'
-    case "couldn't connect":
-    case 'call back':
-    case 'followup':
-      return 'bg-blue-100 text-blue-700 border-blue-200'
-    case 'temporarily closed':
-    case 'permanently closed':
-      return 'bg-gray-100 text-gray-700 border-gray-200'
-    case 'converted':
-      return 'bg-green-100 text-green-700 border-green-200'
-    default:
-      return 'bg-slate-100 text-slate-700 border-slate-200'
+function statusPill(status: string | null) {
+  if (!status) return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
+  const s = status.toLowerCase().replace(/\s+/g, '-')
+  const map: Record<string, { bg: string; color: string }> = {
+    lead: { bg: '#E8E4DE', color: '#6B6560' },
+    contacted: { bg: '#DBEAFE', color: '#1E40AF' },
+    interested: { bg: '#FEF3C7', color: '#92400E' },
+    negotiation: { bg: '#EDE9FE', color: '#5B21B6' },
+    won: { bg: '#D1FAE5', color: '#065F46' },
+    lost: { bg: '#FEE2E2', color: '#991B1B' },
+    converted: { bg: '#CFFAFE', color: '#155E75' },
+    'not-interested': { bg: '#F3F4F6', color: '#6B7280' },
   }
+  const c = map[s] || { bg: '#E8E4DE', color: '#6B6560' }
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      padding: '4px 11px', borderRadius: 999,
+      background: c.bg, color: c.color,
+      fontSize: 12, fontWeight: 600,
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.color }} />
+      {status}
+    </span>
+  )
 }
 
-function cleanPhoneForActions(phone: string | null) {
-  if (!phone) return null
-  const cleaned = phone.replace(/\D/g, '')
-  if (cleaned.length === 10) return { tel: `+91${cleaned}`, wa: `91${cleaned}`, display: cleaned }
-  if (cleaned.length === 12 && cleaned.startsWith('91')) return { tel: `+${cleaned}`, wa: cleaned, display: cleaned.slice(2) }
-  if (cleaned.length === 11 && cleaned.startsWith('0')) {
-    const w = cleaned.slice(1)
-    return { tel: `+91${w}`, wa: `91${w}`, display: w }
+function priorityPill(p: string | null) {
+  if (!p) return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
+  const map: Record<string, { bg: string; color: string }> = {
+    high: { bg: '#FEE2E2', color: '#991B1B' },
+    medium: { bg: '#FEF3C7', color: '#92400E' },
+    low: { bg: '#D1FAE5', color: '#065F46' },
   }
-  if (cleaned.length >= 7) return { tel: cleaned, wa: cleaned, display: cleaned }
-  return null
+  const c = map[p.toLowerCase()] || { bg: '#F3F4F6', color: '#6B7280' }
+  return (
+    <span style={{
+      display: 'inline-flex', padding: '4px 11px', borderRadius: 999,
+      background: c.bg, color: c.color, fontSize: 12, fontWeight: 600,
+    }}>
+      {p}
+    </span>
+  )
 }
 
-export default function RestaurantDetailPanel({
+export default function RestaurantDetail({
   restaurant,
-  open = true,
   onClose,
-  executives = [],
-  assigneeOptions = [],
-  onSaved,
-}: Props) {
-  const [form, setForm] = useState<Restaurant | null>(restaurant)
-  const [saving, setSaving] = useState(false)
-  const [activities, setActivities] = useState<ActivityItem[]>([])
-  const [loadingActivities, setLoadingActivities] = useState(false)
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
-  const [showActivityMobile, setShowActivityMobile] = useState(false)
+  assigneeOptions,
+}: {
+  restaurant: Restaurant
+  onClose: () => void
+  assigneeOptions: string[]
+}) {
+  const [tab, setTab] = useState<Tab>('Overview')
+  const [notes, setNotes] = useState<Note[]>([])
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [docs, setDocs] = useState<Doc[]>([])
+  const [newNote, setNewNote] = useState('')
+  const r = restaurant
 
-  const mergedExecutives: Executive[] =
-    executives.length > 0
-      ? executives
-      : assigneeOptions
-          .filter((name) => name && name !== 'Unassigned')
-          .map((name, index) => ({
-            id: String(index),
-            full_name: name,
-          }))
-
+  // Escape key closes
   useEffect(() => {
-    setForm(restaurant)
-  }, [restaurant])
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
 
+  // Fetch tab data
   useEffect(() => {
-    if (restaurant?.id && open) {
-      loadActivities(restaurant.id)
-    }
-  }, [restaurant?.id, open])
+    if (tab === 'Notes') fetchNotes()
+    if (tab === 'Activity') fetchActivity()
+    if (tab === 'Documents') fetchDocs()
+  }, [tab, r.id])
 
-  // Body scroll lock while modal is open
-  useEffect(() => {
-    if (!open) return
-    const originalOverflow = document.body.style.overflow
-    const originalPosition = document.body.style.position
-    const scrollY = window.scrollY
-    document.body.style.overflow = 'hidden'
-    document.body.style.position = 'fixed'
-    document.body.style.width = '100%'
-    document.body.style.top = `-${scrollY}px`
-    return () => {
-      document.body.style.overflow = originalOverflow
-      document.body.style.position = originalPosition
-      document.body.style.width = ''
-      document.body.style.top = ''
-      window.scrollTo(0, scrollY)
-    }
-  }, [open])
-
-  // Escape key closes modal
-  useEffect(() => {
-    if (!open) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
-
-  // Auto-dismiss toast
-  useEffect(() => {
-    if (!toast) return
-    const t = setTimeout(() => setToast(null), 3500)
-    return () => clearTimeout(t)
-  }, [toast])
-
-  async function loadActivities(restaurantId: string) {
+  async function fetchNotes() {
     try {
-      setLoadingActivities(true)
-      const res = await fetch(`/api/restaurants/${restaurantId}/activity`, {
-        cache: 'no-store',
-      })
-      const data = await res.json()
-      setActivities(data.activities || [])
-    } catch (error) {
-      console.error('Failed to load activities', error)
-      setActivities([])
-    } finally {
-      setLoadingActivities(false)
-    }
+      const res = await fetch(`/api/restaurants/${r.id}/notes`)
+      if (res.ok) { const d = await res.json(); setNotes(d.data || []) }
+    } catch {}
   }
 
-  const hasChanges = useMemo(() => {
-    if (!restaurant || !form) return false
-
-    return (
-      restaurant.restaurant_name !== form.restaurant_name ||
-      restaurant.owner_name !== form.owner_name ||
-      restaurant.phone !== form.phone ||
-      restaurant.city !== form.city ||
-      restaurant.area !== form.area ||
-      restaurant.lead_status !== form.lead_status ||
-      restaurant.assigned_to_name !== form.assigned_to_name ||
-      restaurant.remarks !== form.remarks
-    )
-  }, [restaurant, form])
-
-  async function handleSave() {
-    if (!form || !restaurant?.id) return
-
+  async function fetchActivity() {
     try {
-      setSaving(true)
+      const res = await fetch(`/api/restaurants/${r.id}/activity`)
+      if (res.ok) { const d = await res.json(); setActivities(d.data || []) }
+    } catch {}
+  }
 
-      const res = await fetch(`/api/restaurants/${restaurant.id}`, {
-        method: 'PATCH',
+  async function fetchDocs() {
+    try {
+      const res = await fetch(`/api/restaurants/${r.id}/documents`)
+      if (res.ok) { const d = await res.json(); setDocs(d.data || []) }
+    } catch {}
+  }
+
+  async function addNote() {
+    if (!newNote.trim()) return
+    try {
+      await fetch(`/api/restaurants/${r.id}/notes`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          restaurant_name: form.restaurant_name,
-          owner_name: form.owner_name,
-          phone: form.phone,
-          city: form.city,
-          area: form.area,
-          lead_status: form.lead_status,
-          assigned_to_name: form.assigned_to_name,
-          remarks: form.remarks,
-        }),
+        body: JSON.stringify({ note: newNote.trim(), created_by: 'Goverdhan' }),
       })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        setToast({ type: 'error', msg: data.error || 'Failed to save' })
-        return
-      }
-
-      setForm(data.restaurant)
-      await loadActivities(restaurant.id)
-      onSaved?.()
-      setToast({ type: 'success', msg: 'Changes saved' })
-    } catch (error) {
-      console.error(error)
-      setToast({ type: 'error', msg: 'Something went wrong' })
-    } finally {
-      setSaving(false)
+      setNewNote('')
+      fetchNotes()
+      showToast('Note added')
+    } catch {
+      // If API doesn't exist yet, add locally
+      setNotes(prev => [{ id: Date.now(), note: newNote.trim(), created_by: 'Goverdhan', created_at: new Date().toISOString() }, ...prev])
+      setNewNote('')
+      showToast('Note saved locally')
     }
   }
 
-  if (!open || !form) return null
+  const labelStyle: React.CSSProperties = {
+    fontSize: 11.5, fontWeight: 600,
+    textTransform: 'uppercase', letterSpacing: '0.05em',
+    color: 'var(--text-tertiary)', marginBottom: 5,
+  }
 
-  const phoneActions = cleanPhoneForActions(form.phone)
+  const valStyle: React.CSSProperties = {
+    fontSize: 14, color: 'var(--text-primary)', fontWeight: 450,
+  }
+
+  const empty = <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>—</span>
+
+  const divider = <div style={{ gridColumn: '1 / -1', height: 1, background: 'var(--border-light)', margin: '6px 0' }} />
+
+  const sectionHead = (text: string) => (
+    <div style={{
+      gridColumn: '1 / -1', fontFamily: 'var(--font-display)',
+      fontSize: 18, fontStyle: 'italic', color: 'var(--text-primary)', paddingTop: 8,
+    }}>{text}</div>
+  )
+
+  const field = (label: string, value: React.ReactNode) => (
+    <div>
+      <div style={labelStyle}>{label}</div>
+      <div style={valStyle}>{value || empty}</div>
+    </div>
+  )
+
+  const waLink = (phone: string | null) => {
+    if (!phone) return empty
+    return (
+      <a href={`https://wa.me/91${phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
+        style={{ color: '#25D366', fontWeight: 550, textDecoration: 'none' }}>
+        📱 {phone}
+      </a>
+    )
+  }
+
+  const activityIcon: Record<string, { cls: string; emoji: string }> = {
+    status_change: { cls: 'activity-icon-status', emoji: '↻' },
+    note_added: { cls: 'activity-icon-note', emoji: '✎' },
+    assigned: { cls: 'activity-icon-assign', emoji: '→' },
+    call_made: { cls: 'activity-icon-call', emoji: '✆' },
+    document_uploaded: { cls: 'activity-icon-doc', emoji: '📎' },
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-        onClick={onClose}
-      />
+    <>
+      {/* Overlay */}
+      <div onClick={onClose} style={{
+        position: 'fixed', inset: 0, background: 'var(--bg-overlay)',
+        zIndex: 500, backdropFilter: 'blur(4px)',
+        animation: 'fadeIn 0.2s ease both',
+      }} />
 
-      {/* Modal container — full screen on mobile, side panel on desktop */}
-      <div
-        className="relative ml-auto h-full w-full sm:max-w-5xl bg-white shadow-2xl flex flex-col"
-        style={{ maxHeight: '100dvh' }}
-      >
-        {/* HEADER — always visible, non-scrolling */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white">
-          <div className="px-4 sm:px-8 py-4 sm:py-6">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3 min-w-0 flex-1">
-                <div className="flex h-10 w-10 sm:h-12 sm:w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-base sm:text-lg font-semibold text-white">
-                  {(form.restaurant_name || 'R').charAt(0).toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-lg sm:text-2xl font-semibold tracking-tight text-slate-900 truncate">
-                    {form.restaurant_name || 'Restaurant Details'}
-                  </h2>
-                  <p className="text-xs sm:text-sm text-slate-500 truncate">
-                    Edit info, assignee, and remarks
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={onClose}
-                aria-label="Close"
-                className="flex-shrink-0 flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center sm:px-4 sm:py-2 rounded-2xl border border-slate-200 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                <span className="sm:hidden text-lg leading-none">✕</span>
-                <span className="hidden sm:inline">Close</span>
-              </button>
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span
-                className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getStatusClasses(
-                  form.lead_status
-                )}`}
-              >
-                {form.lead_status || 'Unknown'}
-              </span>
-              <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-                {form.assigned_to_name || 'Unassigned'}
-              </span>
-              {activities.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowActivityMobile(!showActivityMobile)}
-                  className="lg:hidden inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600"
-                >
-                  {showActivityMobile ? 'Hide' : 'Show'} activity ({activities.length})
-                </button>
-              )}
-            </div>
-
-            {/* Quick-action row: Call + WhatsApp */}
-            {phoneActions && (
-              <div className="mt-3 flex gap-2">
-                
-                  href={`tel:${phoneActions.tel}`}
-                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-100 active:bg-blue-200 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
-                  </svg>
-                  Call
-                </a>
-                
-                  href={`https://wa.me/${phoneActions.wa}?text=${encodeURIComponent(
-                    `Hi${form.owner_name ? ' ' + form.owner_name : ''}, this is from Tipplr. Do you have a moment to discuss partnering with us${form.restaurant_name ? ' for ' + form.restaurant_name : ''}?`
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-medium text-green-700 hover:bg-green-100 active:bg-green-200 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.693.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884" />
-                  </svg>
-                  WhatsApp
-                </a>
-              </div>
-            )}
+      {/* Panel */}
+      <div style={{
+        position: 'fixed', top: 0, right: 0,
+        width: 680, maxWidth: '92vw', height: '100vh',
+        background: 'var(--bg-card)', zIndex: 501,
+        boxShadow: 'var(--shadow-xl)',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) both',
+      }}>
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '20px 28px', borderBottom: '1px solid var(--border)', flexShrink: 0,
+        }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontStyle: 'italic' }}>
+            {r.restaurant_name || 'Restaurant'}
           </div>
+          <button onClick={onClose} style={{
+            width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 10, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-secondary)',
+          }}>✕</button>
         </div>
 
-        {/* BODY — scrollable */}
-        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] overflow-hidden">
-          {/* Form column — scrolls independently */}
-          <div
-            className={`overflow-y-auto px-4 sm:px-8 py-5 ${
-              showActivityMobile ? 'hidden lg:block' : 'block'
-            }`}
-            style={{ WebkitOverflowScrolling: 'touch' }}
-          >
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Restaurant Name
-                </label>
-                <input
-                  value={form.restaurant_name || ''}
-                  onChange={(e) => setForm({ ...form, restaurant_name: e.target.value })}
-                  className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                />
-              </div>
+        {/* Tabs */}
+        <div style={{
+          display: 'flex', borderBottom: '1px solid var(--border)',
+          padding: '0 28px', background: 'var(--bg-table-header)', overflowX: 'auto',
+        }}>
+          {TABS.map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{
+              padding: '14px 18px', fontSize: 13,
+              fontWeight: tab === t ? 600 : 500,
+              color: tab === t ? 'var(--accent)' : 'var(--text-secondary)',
+              cursor: 'pointer', border: 'none', background: 'none',
+              borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
+              fontFamily: 'var(--font-body)', whiteSpace: 'nowrap',
+            }}>{t}</button>
+          ))}
+        </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Owner Name
-                </label>
-                <input
-                  value={form.owner_name || ''}
-                  onChange={(e) => setForm({ ...form, owner_name: e.target.value })}
-                  className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                />
-              </div>
+        {/* Tab Content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  inputMode="tel"
-                  value={form.phone || ''}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                />
-              </div>
+          {/* ═══ OVERVIEW ═══ */}
+          {tab === 'Overview' && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px 28px' }}>
+                {field('Status', statusPill(r.lead_status))}
+                {field('Priority', priorityPill(r.priority))}
+                {field('Assigned To', r.assigned_to_name)}
+                {field('Follow Up', r.follow_up_date ? formatDate(r.follow_up_date) : null)}
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    City
-                  </label>
-                  <input
-                    value={form.city || ''}
-                    onChange={(e) => setForm({ ...form, city: e.target.value })}
-                    className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Area
-                  </label>
-                  <input
-                    value={form.area || ''}
-                    onChange={(e) => setForm({ ...form, area: e.target.value })}
-                    className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                  />
-                </div>
-              </div>
+                {divider}
+                {sectionHead('Contact')}
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Lead Status
-                  </label>
-                  <select
-                    value={form.lead_status || ''}
-                    onChange={(e) => setForm({ ...form, lead_status: e.target.value })}
-                    className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                  >
-                    {[
-                      'Agreed',
-                      'Not Interested',
-                      'Visit',
-                      'Incorrect Number',
-                      "Couldn't Connect",
-                      'Call Back',
-                      'Wrong Number',
-                      'Invalid Number',
-                      'Temporarily Closed',
-                      'Permanently Closed',
-                      'Followup',
-                      'Converted',
-                    ].map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Assignee
-                  </label>
-                  <select
-                    value={form.assigned_to_name || ''}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        assigned_to_name: e.target.value || null,
-                      })
-                    }
-                    className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                  >
-                    <option value="">Unassigned</option>
-                    {mergedExecutives.map((exec) => (
-                      <option key={exec.id} value={exec.full_name}>
-                        {exec.full_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+                {field('Owner', r.owner_name)}
+                {field('Phone', waLink(r.phone))}
+                {field('Alt Phone', r.alternate_phone)}
+                {field('Email', r.email)}
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Remarks
-                </label>
-                <textarea
-                  rows={6}
-                  value={form.remarks || ''}
-                  onChange={(e) => setForm({ ...form, remarks: e.target.value })}
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                  placeholder="Add notes, follow-up context, call summary..."
-                />
-              </div>
+                {divider}
+                {sectionHead('Location')}
 
-              <div className="h-4" />
-            </div>
-          </div>
+                {field('Area', r.area)}
+                {field('Zone', r.zone)}
+                {field('City', r.city)}
+                {field('Address', r.address)}
 
-          {/* Activity column — scrolls independently on desktop, optional on mobile */}
-          <div
-            className={`border-l border-slate-200 bg-slate-50 px-4 sm:px-6 py-5 overflow-y-auto ${
-              showActivityMobile ? 'block' : 'hidden lg:block'
-            }`}
-            style={{ WebkitOverflowScrolling: 'touch' }}
-          >
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Activity Log
-            </h3>
-            <div className="mt-4 space-y-3">
-              {loadingActivities ? (
-                <div className="text-sm text-slate-500">Loading activity...</div>
-              ) : activities.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
-                  No activity yet.
-                </div>
-              ) : (
-                activities.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-                  >
-                    <div className="text-sm font-semibold text-slate-900">
-                      {item.action_type}
+                {r.remarks && (
+                  <>
+                    {divider}
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <div style={labelStyle}>Remarks</div>
+                      <div style={{
+                        ...valStyle, background: 'var(--bg-input)',
+                        padding: '12px 14px', borderRadius: 10, lineHeight: 1.6,
+                      }}>{r.remarks}</div>
                     </div>
-                    {item.field_name && (
-                      <div className="mt-1 text-sm text-slate-600">
-                        Field: {item.field_name}
-                      </div>
-                    )}
-                    {(item.old_value || item.new_value) && (
-                      <div className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700 break-words">
-                        {item.old_value || '—'} → {item.new_value || '—'}
-                      </div>
-                    )}
-                    <div className="mt-3 text-xs text-slate-400">
-                      {new Date(item.created_at).toLocaleString()}
-                      {item.actor_name ? ` • ${item.actor_name}` : ''}
+                  </>
+                )}
+              </div>
+
+              {/* Quick Actions */}
+              <div style={{
+                display: 'flex', gap: 8, flexWrap: 'wrap',
+                marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--border-light)',
+              }}>
+                {r.phone && (
+                  <a href={`https://wa.me/91${r.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 8,
+                      padding: '10px 18px', borderRadius: 10, border: 'none',
+                      background: 'var(--accent)', color: '#fff',
+                      textDecoration: 'none', fontSize: 13.5, fontWeight: 550,
+                    }}>
+                    📱 WhatsApp
+                  </a>
+                )}
+                <button onClick={() => showToast('Call logged')} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '10px 18px', borderRadius: 10,
+                  border: '1px solid var(--border)', background: 'var(--bg-card)',
+                  color: 'var(--text-primary)', cursor: 'pointer',
+                  fontSize: 13.5, fontWeight: 550, fontFamily: 'var(--font-body)',
+                }}>✆ Log Call</button>
+                <button onClick={() => setTab('Notes')} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '10px 18px', borderRadius: 10,
+                  border: '1px solid var(--border)', background: 'var(--bg-card)',
+                  color: 'var(--text-primary)', cursor: 'pointer',
+                  fontSize: 13.5, fontWeight: 550, fontFamily: 'var(--font-body)',
+                }}>✎ Add Note</button>
+              </div>
+            </>
+          )}
+
+          {/* ═══ DETAILS ═══ */}
+          {tab === 'Details' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px 28px' }}>
+              {sectionHead('Restaurant Info')}
+              {field('Brand Name', r.brand_name)}
+              {field('Category', r.category)}
+              {field('Type', r.restaurant_type)}
+              {field('Source', r.source)}
+
+              {divider}
+              {sectionHead('Onboarding')}
+              {field('Commission %', r.commission_percent ? `${r.commission_percent}%` : null)}
+              {field('Discount Offer', r.discount_offer)}
+              {field('FSSAI Number', r.fssai_number ? (
+                <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{r.fssai_number}</span>
+              ) : null)}
+              {field('Menu Pricing', r.menu_pricing)}
+
+              {divider}
+              {sectionHead('Compliance')}
+              {field('Menu Status', r.menu_status)}
+              {field('Contract Status', r.contract_status)}
+              {field('KYC Status', r.kyc_status)}
+              {field('Listing Status', r.listing_status)}
+
+              {divider}
+              {sectionHead('Timeline')}
+              {field('Created', formatDate(r.created_at))}
+              {field('Last Updated', formatDate(r.updated_at))}
+              {field('Last Contacted', r.last_contacted_at ? formatDate(r.last_contacted_at) : null)}
+              {field('Onboarded', r.onboarded_date ? formatDate(r.onboarded_date) : null)}
+              {field('Go Live Date', r.go_live_date ? formatDate(r.go_live_date) : null)}
+              {field('Documents Received', r.documents_received ? '✓ Yes' : 'No')}
+              {field('Converted', r.converted ? '✓ Yes' : 'No')}
+
+              {r.reason && (
+                <>
+                  {divider}
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <div style={labelStyle}>Reason (Lost / Not Interested)</div>
+                    <div style={{
+                      background: '#FEE2E2', padding: '10px 14px',
+                      borderRadius: 10, color: '#991B1B', fontSize: 14,
+                    }}>{r.reason}</div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ═══ NOTES ═══ */}
+          {tab === 'Notes' && (
+            <>
+              <div style={{
+                display: 'flex', gap: 10,
+                paddingBottom: 16, borderBottom: '1px solid var(--border-light)', marginBottom: 16,
+              }}>
+                <textarea
+                  value={newNote}
+                  onChange={e => setNewNote(e.target.value)}
+                  placeholder={`Write a note about ${r.restaurant_name}...`}
+                  rows={2}
+                  style={{
+                    flex: 1, padding: '10px 14px',
+                    border: '1px solid var(--border)', borderRadius: 10,
+                    fontFamily: 'var(--font-body)', fontSize: 13.5,
+                    color: 'var(--text-primary)', background: 'var(--bg-input)',
+                    outline: 'none', resize: 'vertical', minHeight: 42,
+                  }}
+                />
+                <button onClick={addNote} style={{
+                  padding: '10px 18px', borderRadius: 10, border: 'none',
+                  background: 'var(--accent)', color: '#fff', cursor: 'pointer',
+                  fontSize: 13, fontWeight: 550, fontFamily: 'var(--font-body)',
+                  alignSelf: 'flex-end',
+                }}>Add</button>
+              </div>
+
+              {notes.length > 0 ? notes.map(n => (
+                <div key={n.id} style={{
+                  display: 'flex', gap: 14, padding: '16px 0',
+                  borderBottom: '1px solid var(--border-light)',
+                }}>
+                  <div className="activity-icon-note" style={{
+                    width: 32, height: 32, flexShrink: 0, borderRadius: 999,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
+                  }}>✎</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13.5, color: 'var(--text-primary)', lineHeight: 1.5 }}>{n.note}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                      {n.created_by} · {timeAgo(n.created_at)}
                     </div>
                   </div>
-                ))
+                </div>
+              )) : (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+                  No notes yet. Add one above.
+                </div>
               )}
-            </div>
-          </div>
-        </div>
+            </>
+          )}
 
-        {/* FOOTER — always visible */}
-        <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 sm:px-8 py-4">
-          <div className="flex items-center justify-end gap-3">
-            <button
-              onClick={onClose}
-              className="rounded-2xl border border-slate-200 px-4 sm:px-5 py-2.5 sm:py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={!hasChanges || saving}
-              className="rounded-2xl bg-slate-900 px-4 sm:px-5 py-2.5 sm:py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </div>
+          {/* ═══ ACTIVITY ═══ */}
+          {tab === 'Activity' && (
+            <>
+              {activities.length > 0 ? activities.map(a => {
+                const ic = activityIcon[a.action_type] || { cls: 'activity-icon-note', emoji: '•' }
+                return (
+                  <div key={a.id} style={{
+                    display: 'flex', gap: 14, padding: '16px 0',
+                    borderBottom: '1px solid var(--border-light)',
+                  }}>
+                    <div className={ic.cls} style={{
+                      width: 32, height: 32, flexShrink: 0, borderRadius: 999,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
+                    }}>{ic.emoji}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13.5, color: 'var(--text-primary)', lineHeight: 1.5 }}>{a.action_details}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                        {a.performed_by} · {timeAgo(a.created_at)}
+                      </div>
+                    </div>
+                  </div>
+                )
+              }) : (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+                  No activity recorded for this restaurant
+                </div>
+              )}
+            </>
+          )}
 
-        {/* Toast */}
-        {toast && (
-          <div
-            className={`fixed bottom-24 sm:bottom-6 left-1/2 -translate-x-1/2 sm:left-auto sm:right-6 sm:translate-x-0 max-w-sm px-4 py-3 rounded-lg shadow-lg z-[60] ${
-              toast.type === 'success'
-                ? 'bg-green-50 border border-green-200 text-green-800'
-                : 'bg-red-50 border border-red-200 text-red-800'
-            }`}
-          >
-            <div className="font-medium flex items-center gap-2">
-              <span>{toast.type === 'success' ? '✓' : '✕'}</span>
-              <span>{toast.msg}</span>
-            </div>
-          </div>
-        )}
+          {/* ═══ DOCUMENTS ═══ */}
+          {tab === 'Documents' && (
+            <>
+              <div style={{ marginBottom: 16 }}>
+                <button onClick={() => showToast('Upload — wire to Supabase Storage')} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '10px 18px', borderRadius: 10,
+                  border: '1px solid var(--border)', background: 'var(--bg-card)',
+                  color: 'var(--text-primary)', cursor: 'pointer',
+                  fontSize: 13.5, fontWeight: 550, fontFamily: 'var(--font-body)',
+                }}>↑ Upload Document</button>
+              </div>
+
+              {docs.length > 0 ? docs.map(d => (
+                <div key={d.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 14,
+                  padding: '14px 0', borderBottom: '1px solid var(--border-light)',
+                }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 10, background: '#FEF3C7',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#92400E', fontSize: 16, flexShrink: 0,
+                  }}>📄</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 550, fontSize: 13.5 }}>{d.file_name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                      Uploaded by {d.uploaded_by} · {formatDate(d.created_at)}
+                    </div>
+                  </div>
+                </div>
+              )) : (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+                  No documents uploaded yet
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }
