@@ -21,61 +21,54 @@ export default async function ReportsPage() {
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
   const todayStartIso = todayStart.toISOString()
-
-  const weekStart = new Date()
-  weekStart.setDate(weekStart.getDate() - 7)
-  const weekStartIso = weekStart.toISOString()
-
+  const weekStartIso = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const activeStatuses = ['lead', 'followup', 'call back', 'visit', "couldn't connect"]
 
-  // Fetch all leads
-  const { data: allLeads } = await supabase
-    .from('restaurants')
-    .select('id, restaurant_name, lead_status, assigned_to_name, updated_at, follow_up_date, converted')
-    .range(0, 9999)
+  const [{ data: allLeads }, { data: execData }] = await Promise.all([
+    supabase
+      .from('restaurants')
+      .select('id, restaurant_name, lead_status, assigned_to_name, updated_at, follow_up_date, converted')
+      .range(0, 9999),
+    supabase
+      .from('executives')
+      .select('id, full_name')
+      .order('full_name', { ascending: true }),
+  ])
 
   const leads = (allLeads || []) as LeadRow[]
+  const executives = (execData || []) as { id: string; full_name: string }[]
 
   // ─── TODAY'S SUMMARY ───
   const execTodayMap = new Map<string, { updated: number; closed: number; followupsSet: number }>()
+  const today = now.toISOString().slice(0, 10)
 
   leads.forEach((x) => {
     if (!x.assigned_to_name) return
     const name = x.assigned_to_name
-    if (!execTodayMap.has(name)) {
-      execTodayMap.set(name, { updated: 0, closed: 0, followupsSet: 0 })
-    }
+    if (!execTodayMap.has(name)) execTodayMap.set(name, { updated: 0, closed: 0, followupsSet: 0 })
     const stats = execTodayMap.get(name)!
-
     if (x.updated_at && x.updated_at >= todayStartIso) {
       stats.updated++
       const s = (x.lead_status || '').toLowerCase()
       if (s === 'agreed' || s === 'converted' || x.converted) stats.closed++
     }
-
-    if (x.follow_up_date === now.toISOString().slice(0, 10)) {
-      stats.followupsSet++
-    }
+    if (x.follow_up_date === today) stats.followupsSet++
   })
 
   const todaySummary = Array.from(execTodayMap.entries())
     .map(([name, s]) => ({ name, ...s }))
     .sort((a, b) => b.updated - a.updated)
 
-  // ─── THIS WEEK PER EXEC ───
+  // ─── WEEK STATS ───
   const execWeekMap = new Map<string, { total: number; closed: number; updated: number }>()
-
   leads.forEach((x) => {
     if (!x.assigned_to_name) return
     const name = x.assigned_to_name
-    if (!execWeekMap.has(name)) {
-      execWeekMap.set(name, { total: 0, closed: 0, updated: 0 })
-    }
+    if (!execWeekMap.has(name)) execWeekMap.set(name, { total: 0, closed: 0, updated: 0 })
     const stats = execWeekMap.get(name)!
     stats.total++
-
     const s = (x.lead_status || '').toLowerCase()
     if (s === 'agreed' || s === 'converted' || x.converted) stats.closed++
     if (x.updated_at && x.updated_at >= weekStartIso) stats.updated++
@@ -92,19 +85,19 @@ export default async function ReportsPage() {
     .filter(e => e.total > 0)
     .sort((a, b) => b.closed - a.closed)
 
-  // ─── CONVERSION FUNNEL ───
-  const total = leads.length
+  // ─── STATUS COUNTS ───
+  const count = (fn: (s: string) => boolean) =>
+    leads.filter(x => fn((x.lead_status || '').toLowerCase())).length
+
   const statusCounts = {
-    lead: leads.filter(x => (x.lead_status || '').toLowerCase() === 'lead').length,
-    followup: leads.filter(x => (x.lead_status || '').toLowerCase() === 'followup').length,
-    callBack: leads.filter(x => (x.lead_status || '').toLowerCase() === 'call back').length,
-    agreed: leads.filter(x => (x.lead_status || '').toLowerCase() === 'agreed').length,
-    converted: leads.filter(x => (x.lead_status || '').toLowerCase() === 'converted').length,
-    notInterested: leads.filter(x => (x.lead_status || '').toLowerCase() === 'not interested').length,
-    couldntConnect: leads.filter(x => (x.lead_status || '').toLowerCase() === "couldn't connect").length,
-    incorrectNumber: leads.filter(x =>
-      ['incorrect number', 'wrong number', 'invalid number'].includes((x.lead_status || '').toLowerCase())
-    ).length,
+    lead: count(s => s === 'lead'),
+    followup: count(s => s === 'followup'),
+    callBack: count(s => s === 'call back'),
+    agreed: count(s => s === 'agreed'),
+    converted: count(s => s === 'converted'),
+    notInterested: count(s => s === 'not interested'),
+    couldntConnect: count(s => s === "couldn't connect"),
+    incorrectNumber: count(s => ['incorrect number', 'wrong number', 'invalid number'].includes(s)),
   }
 
   // ─── STALE LEADS ───
@@ -141,9 +134,10 @@ export default async function ReportsPage() {
       todaySummary={todaySummary}
       weekStats={weekStats}
       statusCounts={statusCounts}
-      total={total}
+      total={leads.length}
       staleLeads={staleLeads}
       dateLabel={dateLabel}
+      executives={executives}
     />
   )
 }

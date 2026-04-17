@@ -27,6 +27,9 @@ const STATUSES = [
   'Permanently Closed', 'Temporarily Closed', 'Converted',
 ]
 
+// Statuses that need follow-up → auto-suggest tomorrow
+const NEEDS_FOLLOWUP = ['followup', 'call back', 'visit', "couldn't connect"]
+
 function getStatusClasses(status: string | null) {
   switch ((status || '').toLowerCase()) {
     case 'agreed': return 'bg-emerald-100 text-emerald-700 border-emerald-200'
@@ -39,6 +42,12 @@ function getStatusClasses(status: string | null) {
     case 'converted': return 'bg-green-100 text-green-700 border-green-200'
     default: return 'bg-slate-100 text-slate-600 border-slate-200'
   }
+}
+
+function getTomorrow() {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().slice(0, 10)
 }
 
 function formatDate(d: string | null) {
@@ -57,10 +66,10 @@ export default function MyDayPage() {
   const [quickNote, setQuickNote] = useState('')
   const [quickFollowUp, setQuickFollowUp] = useState('')
   const [completedToday, setCompletedToday] = useState(0)
+  const [viewMode, setViewMode] = useState<'list' | 'area'>('list')
 
   const today = new Date().toISOString().slice(0, 10)
 
-  // Load executives
   useEffect(() => {
     async function load() {
       try {
@@ -72,7 +81,6 @@ export default function MyDayPage() {
     load()
   }, [])
 
-  // Load restaurants
   useEffect(() => {
     loadRestaurants()
   }, [selectedExec])
@@ -82,23 +90,17 @@ export default function MyDayPage() {
     try {
       const params = new URLSearchParams({ page: '1', pageSize: '500' })
       if (selectedExec) params.set('assignedTo', selectedExec)
-
       const res = await fetch(`/api/restaurants?${params.toString()}`, { cache: 'no-store' })
       const data = await res.json()
-
-      if (res.ok) {
-        setRestaurants(data.data || [])
-      }
-    } catch (e) {
-      console.error('Failed to load', e)
-    }
+      if (res.ok) setRestaurants(data.data || [])
+    } catch {}
     setLoading(false)
   }
 
-  // Categorize restaurants
+  // Categorize
   const dueToday = useMemo(() =>
     restaurants.filter(r => r.follow_up_date === today)
-      .sort((a, b) => (a.restaurant_name || '').localeCompare(b.restaurant_name || '')),
+      .sort((a, b) => (a.area || '').localeCompare(b.area || '')),
     [restaurants, today]
   )
 
@@ -111,17 +113,41 @@ export default function MyDayPage() {
   const upcoming = useMemo(() =>
     restaurants.filter(r => r.follow_up_date && r.follow_up_date > today)
       .sort((a, b) => (a.follow_up_date || '').localeCompare(b.follow_up_date || ''))
-      .slice(0, 20),
+      .slice(0, 30),
     [restaurants, today]
   )
 
   const noFollowUp = useMemo(() =>
-    restaurants.filter(r => !r.follow_up_date && r.lead_status !== 'Converted' && r.lead_status !== 'Not Interested' && r.lead_status !== 'Permanently Closed')
-      .slice(0, 10),
+    restaurants.filter(r =>
+      !r.follow_up_date &&
+      r.lead_status !== 'Converted' &&
+      r.lead_status !== 'Not Interested' &&
+      r.lead_status !== 'Permanently Closed' &&
+      r.lead_status !== 'Agreed'
+    ).slice(0, 15),
     [restaurants]
   )
 
-  // Quick update
+  // Area grouping of dueToday
+  const byArea = useMemo(() => {
+    const map = new Map<string, Restaurant[]>()
+    dueToday.forEach(r => {
+      const area = r.area || r.city || 'Other'
+      if (!map.has(area)) map.set(area, [])
+      map.get(area)!.push(r)
+    })
+    return Array.from(map.entries()).sort((a, b) => b[1].length - a[1].length)
+  }, [dueToday])
+
+  // Auto-suggest follow-up date based on status
+  function handleStatusChange(status: string) {
+    setQuickStatus(status)
+    const s = status.toLowerCase()
+    if (NEEDS_FOLLOWUP.includes(s) && !quickFollowUp) {
+      setQuickFollowUp(getTomorrow())
+    }
+  }
+
   async function submitQuickUpdate(restaurantId: string) {
     if (!quickStatus) return
     setUpdatingId(restaurantId)
@@ -142,18 +168,14 @@ export default function MyDayPage() {
       setQuickNote('')
       setQuickFollowUp('')
       await loadRestaurants()
-    } catch (e) {
-      console.error('Update failed', e)
-    }
+    } catch {}
     setUpdatingId(null)
   }
 
   function RestaurantCard({ r, showDate }: { r: Restaurant; showDate?: boolean }) {
     const isUpdating = quickUpdateId === r.id
-
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden transition-all">
-        {/* Main card */}
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
         <div className="p-4">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
@@ -161,7 +183,7 @@ export default function MyDayPage() {
                 {r.restaurant_name || '—'}
               </div>
               <div className="mt-1 text-[13px] text-slate-500">
-                {r.owner_name || 'No owner'} · {[r.area, r.city].filter(Boolean).join(', ') || 'No location'}
+                {r.owner_name || 'No owner'}{r.area ? ` · ${r.area}` : ''}{r.city ? `, ${r.city}` : ''}
               </div>
             </div>
             <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold flex-shrink-0 ${getStatusClasses(r.lead_status)}`}>
@@ -176,30 +198,28 @@ export default function MyDayPage() {
           )}
 
           {r.remarks && (
-            <div className="mt-2 text-[12px] text-slate-400 leading-snug truncate">
+            <div className="mt-2 text-[12px] text-slate-400 leading-snug line-clamp-1">
               {r.remarks}
             </div>
           )}
 
-          {/* Action buttons */}
           <div className="mt-3 flex items-center gap-2">
             {r.phone && (
               <>
                 <a
                   href={`https://wa.me/91${r.phone.replace(/\D/g, '')}`}
-                  target="_blank"
-                  rel="noreferrer"
+                  target="_blank" rel="noreferrer"
                   onClick={e => e.stopPropagation()}
                   className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-green-50 text-green-700 text-[13px] font-semibold border border-green-200 active:bg-green-100 transition"
                 >
-                  <span>&#x1F4AC;</span> WhatsApp
+                  💬 WhatsApp
                 </a>
                 <a
                   href={`tel:${r.phone}`}
                   onClick={e => e.stopPropagation()}
                   className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 text-blue-700 text-[13px] font-semibold border border-blue-200 active:bg-blue-100 transition"
                 >
-                  <span>&#x260E;</span> Call
+                  📞 Call
                 </a>
               </>
             )}
@@ -220,7 +240,7 @@ export default function MyDayPage() {
                   : 'bg-slate-50 text-slate-700 border-slate-200 active:bg-slate-100'
               }`}
             >
-              <span>&#x270E;</span> Update
+              ✎ Update
             </button>
           </div>
         </div>
@@ -229,10 +249,12 @@ export default function MyDayPage() {
         {isUpdating && (
           <div className="border-t border-slate-200 bg-slate-50 p-4 space-y-3">
             <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">New Status</label>
+              <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+                New Status
+              </label>
               <select
                 value={quickStatus}
-                onChange={e => setQuickStatus(e.target.value)}
+                onChange={e => handleStatusChange(e.target.value)}
                 className="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none"
               >
                 <option value="">Select status</option>
@@ -241,7 +263,9 @@ export default function MyDayPage() {
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Quick Note</label>
+              <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+                Quick Note
+              </label>
               <input
                 type="text"
                 value={quickNote}
@@ -252,7 +276,12 @@ export default function MyDayPage() {
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Next Follow-up</label>
+              <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+                Next Follow-up
+                {quickFollowUp === getTomorrow() && (
+                  <span className="ml-2 text-blue-600 normal-case font-normal">✓ Auto-set to tomorrow</span>
+                )}
+              </label>
               <input
                 type="date"
                 value={quickFollowUp}
@@ -271,7 +300,7 @@ export default function MyDayPage() {
               <button
                 onClick={() => submitQuickUpdate(r.id)}
                 disabled={!quickStatus || updatingId === r.id}
-                className="flex-1 h-10 rounded-xl bg-slate-900 text-white text-sm font-semibold disabled:opacity-50 transition active:bg-slate-800"
+                className="flex-1 h-10 rounded-xl bg-slate-900 text-white text-sm font-semibold disabled:opacity-50 transition"
               >
                 {updatingId === r.id ? 'Saving...' : 'Save'}
               </button>
@@ -283,7 +312,8 @@ export default function MyDayPage() {
   }
 
   function Section({ title, count, color, children, emptyText }: {
-    title: string; count: number; color: string; children: React.ReactNode; emptyText: string
+    title: string; count: number; color: string
+    children: React.ReactNode; emptyText: string
   }) {
     return (
       <div>
@@ -310,7 +340,9 @@ export default function MyDayPage() {
     return 'Good evening'
   })()
 
-  const dayName = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
+  const dayName = new Date().toLocaleDateString('en-IN', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  })
 
   return (
     <div className="space-y-5 pb-8">
@@ -319,12 +351,10 @@ export default function MyDayPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">
-              {greeting}! &#x1F44B;
+              {greeting}! 👋
             </h1>
             <p className="mt-1 text-sm text-slate-500">{dayName}</p>
           </div>
-
-          {/* Exec filter */}
           <select
             value={selectedExec}
             onChange={e => setSelectedExec(e.target.value)}
@@ -337,7 +367,7 @@ export default function MyDayPage() {
           </select>
         </div>
 
-        {/* Daily stats */}
+        {/* Stats */}
         <div className="mt-4 grid grid-cols-3 gap-3">
           <div className="rounded-2xl bg-amber-50 border border-amber-200 p-3 text-center">
             <div className="text-2xl sm:text-3xl font-bold text-amber-700">{dueToday.length}</div>
@@ -352,6 +382,32 @@ export default function MyDayPage() {
             <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600 mt-1">Done Today</div>
           </div>
         </div>
+
+        {/* View toggle for Due Today */}
+        {dueToday.length > 0 && (
+          <div className="mt-4 flex gap-2">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex-1 h-9 rounded-xl text-sm font-semibold transition ${
+                viewMode === 'list'
+                  ? 'bg-slate-900 text-white'
+                  : 'border border-slate-200 text-slate-600 bg-white hover:bg-slate-50'
+              }`}
+            >
+              📋 List View
+            </button>
+            <button
+              onClick={() => setViewMode('area')}
+              className={`flex-1 h-9 rounded-xl text-sm font-semibold transition ${
+                viewMode === 'area'
+                  ? 'bg-slate-900 text-white'
+                  : 'border border-slate-200 text-slate-600 bg-white hover:bg-slate-50'
+              }`}
+            >
+              📍 By Area
+            </button>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -360,7 +416,8 @@ export default function MyDayPage() {
         </div>
       ) : (
         <div className="space-y-8">
-          {/* Overdue — show first, most urgent */}
+
+          {/* Overdue — most urgent */}
           {overdue.length > 0 && (
             <Section title="Overdue" count={overdue.length} color="bg-red-500" emptyText="">
               {overdue.map(r => <RestaurantCard key={r.id} r={r} showDate />)}
@@ -368,9 +425,40 @@ export default function MyDayPage() {
           )}
 
           {/* Due Today */}
-          <Section title="Due Today" count={dueToday.length} color="bg-amber-500" emptyText="No follow-ups scheduled for today. Set follow-up dates on your leads!">
-            {dueToday.map(r => <RestaurantCard key={r.id} r={r} />)}
-          </Section>
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-2 h-2 rounded-full bg-amber-500" />
+              <h2 className="text-lg font-semibold text-slate-900">Due Today</h2>
+              <span className="text-sm text-slate-500">({dueToday.length})</span>
+            </div>
+
+            {dueToday.length === 0 ? (
+              <div className="rounded-2xl bg-slate-50 border border-slate-200 p-6 text-center text-sm text-slate-500">
+                No follow-ups scheduled for today
+              </div>
+            ) : viewMode === 'list' ? (
+              <div className="space-y-3">
+                {dueToday.map(r => <RestaurantCard key={r.id} r={r} />)}
+              </div>
+            ) : (
+              /* Area view */
+              <div className="space-y-6">
+                {byArea.map(([area, areaRestaurants]) => (
+                  <div key={area}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-base font-semibold text-slate-700">📍 {area}</span>
+                      <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                        {areaRestaurants.length} restaurants
+                      </span>
+                    </div>
+                    <div className="space-y-3">
+                      {areaRestaurants.map(r => <RestaurantCard key={r.id} r={r} />)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Upcoming */}
           {upcoming.length > 0 && (
@@ -379,7 +467,7 @@ export default function MyDayPage() {
             </Section>
           )}
 
-          {/* Needs follow-up date */}
+          {/* No follow-up set */}
           {noFollowUp.length > 0 && (
             <Section title="No Follow-up Set" count={noFollowUp.length} color="bg-slate-400" emptyText="">
               {noFollowUp.map(r => <RestaurantCard key={r.id} r={r} />)}

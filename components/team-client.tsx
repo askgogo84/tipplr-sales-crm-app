@@ -1,10 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { showToast } from '@/components/ui'
 
 type Profile = {
-  id: string
+  id: number
   full_name: string
   email: string
   role: string | null
@@ -12,107 +11,101 @@ type Profile = {
 
 const AVATAR_COLORS = ['#C67A3C', '#3B82F6', '#8B5CF6', '#059669', '#DC2626', '#D97706', '#EC4899']
 
+function showToast(msg: string) {
+  const existing = document.getElementById('tipplr-toast')
+  if (existing) existing.remove()
+  const toast = document.createElement('div')
+  toast.id = 'tipplr-toast'
+  Object.assign(toast.style, {
+    position: 'fixed', bottom: '24px', right: '24px',
+    padding: '14px 22px', borderRadius: '10px',
+    background: '#1A1814', color: '#fff',
+    fontSize: '13.5px', fontWeight: '500',
+    boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+    zIndex: '1000', opacity: '1',
+    transition: 'all 0.3s ease',
+    fontFamily: 'sans-serif',
+  })
+  toast.textContent = msg
+  document.body.appendChild(toast)
+  setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300) }, 2800)
+}
+
 export default function TeamClient({ initialData }: { initialData: Profile[] }) {
   const [members, setMembers] = useState(initialData)
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('sales')
   const [loading, setLoading] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
-
     if (!fullName.trim() || !email.trim()) {
       showToast('Please fill in name and email')
       return
     }
-
     setLoading(true)
 
+    const res = await fetch('/api/team/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ full_name: fullName, email, role }),
+    })
+
+    const data = await res.json()
+
+    if (!data.success) {
+      showToast(data.error || 'Failed to add team member')
+      setLoading(false)
+      return
+    }
+
+    setMembers((prev) => [...prev, { id: Date.now(), full_name: fullName, email, role }])
+    setFullName('')
+    setEmail('')
+    setRole('sales')
+    setLoading(false)
+    showToast(`${fullName} added to the team`)
+  }
+
+  async function handleDelete(member: Profile) {
+    setDeletingId(member.id)
     try {
-      const res = await fetch('/api/team/add', {
+      const res = await fetch('/api/team/remove', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          full_name: fullName.trim(),
-          email: email.trim().toLowerCase(),
-          role,
-        }),
+        body: JSON.stringify({ id: member.id }),
       })
-
       const data = await res.json()
-
       if (!data.success) {
-        showToast(data.error || 'Failed to add team member')
-        setLoading(false)
-        return
+        showToast(data.error || 'Failed to remove member')
+      } else {
+        setMembers((prev) => prev.filter((m) => m.id !== member.id))
+        showToast(`${member.full_name} removed from team`)
       }
-
-      setMembers((prev) => [...prev, data.data])
-      setFullName('')
-      setEmail('')
-      setRole('sales')
-      setLoading(false)
-
-      showToast(`${data.data.full_name} added successfully`)
     } catch {
-      setLoading(false)
-      showToast('Failed to add team member')
+      showToast('Failed to remove member')
     }
+    setDeletingId(null)
+    setConfirmDeleteId(null)
   }
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '10px 14px',
-    border: '1px solid var(--border)',
-    borderRadius: 10,
-    fontFamily: 'var(--font-body)',
-    fontSize: 13.5,
-    color: 'var(--text-primary)',
-    background: 'var(--bg-input)',
-    outline: 'none',
-  }
+  const inputClass = "w-full h-11 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
 
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '380px 1fr',
-        gap: 24,
-        alignItems: 'start',
-      }}
-      className="team-grid-responsive"
-    >
-      <div
-        style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
-          borderRadius: 14,
-          overflow: 'hidden',
-        }}
-      >
-        <div style={{ padding: '22px 24px 18px', borderBottom: '1px solid var(--border-light)' }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontStyle: 'italic' }}>
-            Add Member
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
-            New members appear in assignment dropdowns
-          </div>
-        </div>
+    <div className="grid gap-6 lg:grid-cols-[400px_1fr] items-start">
 
-        <form onSubmit={handleAdd} style={{ padding: '20px 24px' }}>
-          <div style={{ marginBottom: 16 }}>
-            <label
-              style={{
-                display: 'block',
-                fontSize: 12,
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                color: 'var(--text-tertiary)',
-                marginBottom: 6,
-              }}
-            >
+      {/* Add Member Card */}
+      <div className="rounded-[28px] border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="p-5 sm:p-6 border-b border-slate-100">
+          <h2 className="text-lg sm:text-xl font-semibold text-slate-900">Add Member</h2>
+          <p className="mt-1 text-sm text-slate-500">New members appear in assignment dropdowns</p>
+        </div>
+        <form onSubmit={handleAdd} className="p-5 sm:p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
               Full Name
             </label>
             <input
@@ -120,22 +113,11 @@ export default function TeamClient({ initialData }: { initialData: Profile[] }) 
               onChange={(e) => setFullName(e.target.value)}
               placeholder="e.g. Bareen"
               required
-              style={inputStyle}
+              className={inputClass}
             />
           </div>
-
-          <div style={{ marginBottom: 16 }}>
-            <label
-              style={{
-                display: 'block',
-                fontSize: 12,
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                color: 'var(--text-tertiary)',
-                marginBottom: 6,
-              }}
-            >
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
               Email
             </label>
             <input
@@ -144,153 +126,115 @@ export default function TeamClient({ initialData }: { initialData: Profile[] }) 
               placeholder="bareen@tipplr.in"
               type="email"
               required
-              style={inputStyle}
+              className={inputClass}
             />
           </div>
-
-          <div style={{ marginBottom: 16 }}>
-            <label
-              style={{
-                display: 'block',
-                fontSize: 12,
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                color: 'var(--text-tertiary)',
-                marginBottom: 6,
-              }}
-            >
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
               Role
             </label>
-            <select value={role} onChange={(e) => setRole(e.target.value)} style={inputStyle}>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className={inputClass}
+            >
               <option value="sales">Sales</option>
+              <option value="manager">Manager</option>
               <option value="admin">Admin</option>
-              <option value="ops">Ops</option>
             </select>
           </div>
-
           <button
             type="submit"
             disabled={loading}
-            style={{
-              width: '100%',
-              padding: '12px 18px',
-              borderRadius: 10,
-              border: 'none',
-              background: 'var(--accent)',
-              color: '#fff',
-              cursor: loading ? 'wait' : 'pointer',
-              fontSize: 13.5,
-              fontWeight: 600,
-              fontFamily: 'var(--font-body)',
-              opacity: loading ? 0.7 : 1,
-            }}
+            className="w-full h-11 rounded-2xl bg-slate-900 text-white text-sm font-semibold disabled:opacity-50 transition hover:bg-slate-800 active:scale-[0.98]"
           >
             {loading ? 'Adding...' : 'Add Team Member'}
           </button>
         </form>
       </div>
 
-      <div
-        style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
-          borderRadius: 14,
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          style={{
-            padding: '22px 24px 18px',
-            borderBottom: '1px solid var(--border-light)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
+      {/* Current Team Card */}
+      <div className="rounded-[28px] border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between">
           <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontStyle: 'italic' }}>
-              Current Team
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+            <h2 className="text-lg sm:text-xl font-semibold text-slate-900">Current Team</h2>
+            <p className="mt-1 text-sm text-slate-500">
               {members.length} member{members.length !== 1 ? 's' : ''}
-            </div>
+            </p>
           </div>
         </div>
 
-        {members.length > 0 ? (
-          members.map((m, i) => (
-            <div
-              key={m.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 14,
-                padding: '16px 20px',
-                borderBottom: '1px solid var(--border-light)',
-                transition: 'background 0.1s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--bg-table-hover)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent'
-              }}
-            >
-              <div
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 999,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: '#fff',
-                  flexShrink: 0,
-                  background: AVATAR_COLORS[i % AVATAR_COLORS.length],
-                }}
-              >
-                {m.full_name.charAt(0)}
-              </div>
-
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 550, fontSize: 14 }}>{m.full_name}</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: 12.5, marginTop: 2 }}>
-                  {m.email}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: 999,
-                  fontSize: 12,
-                  fontWeight: 550,
-                  textTransform: 'capitalize',
-                  background: m.role === 'admin' ? 'var(--accent-badge)' : 'var(--bg-badge)',
-                  color: m.role === 'admin' ? 'var(--accent)' : 'var(--text-secondary)',
-                }}
-              >
-                {m.role || 'sales'}
-              </div>
-            </div>
-          ))
-        ) : (
-          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+        {members.length === 0 ? (
+          <div className="p-12 text-center text-sm text-slate-500">
             No team members yet
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {members.map((m, i) => (
+              <div
+                key={m.id}
+                className="flex items-center gap-3 px-5 sm:px-6 py-4 hover:bg-slate-50 transition-colors"
+              >
+                {/* Avatar */}
+                <div
+                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
+                  style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}
+                >
+                  {m.full_name.charAt(0)}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-slate-900 text-sm truncate">{m.full_name}</div>
+                  <div className="text-xs text-slate-500 mt-0.5 truncate">{m.email}</div>
+                </div>
+
+                {/* Role pill */}
+                <span className={`flex-shrink-0 rounded-full px-3 py-1 text-xs font-semibold capitalize ${
+                  m.role === 'admin' ? 'bg-amber-100 text-amber-700'
+                  : m.role === 'manager' ? 'bg-purple-100 text-purple-700'
+                  : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {m.role || 'sales'}
+                </span>
+
+                {/* Delete button / confirm */}
+                {confirmDeleteId === m.id ? (
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-xs text-slate-500 hidden sm:block">Sure?</span>
+                    <button
+                      onClick={() => handleDelete(m)}
+                      disabled={deletingId === m.id}
+                      className="rounded-xl bg-red-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-50 transition"
+                    >
+                      {deletingId === m.id ? '...' : 'Yes, remove'}
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDeleteId(m.id)}
+                    className="flex-shrink-0 flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 text-slate-400 hover:border-red-200 hover:text-red-500 hover:bg-red-50 transition"
+                    title="Remove member"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                      <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>
-
-      <style>{`
-        @media (max-width: 900px) {
-          .team-grid-responsive {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
     </div>
   )
 }
