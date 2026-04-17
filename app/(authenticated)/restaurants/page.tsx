@@ -201,101 +201,108 @@ export default function RestaurantsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+      {/* Header + Filters */}
+      <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <h1 className="text-4xl font-semibold tracking-tight text-slate-900">
+            <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-slate-900">
               Restaurants
             </h1>
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-1 sm:mt-2 text-sm text-slate-500">
               Track restaurants, owners, assignments, and follow-ups
             </p>
           </div>
 
           <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
-            <form onSubmit={handleSearchSubmit} className="min-w-[320px]">
+            <form onSubmit={handleSearchSubmit} className="w-full sm:min-w-[320px]">
               <input
                 type="text"
-                placeholder="Search restaurant, owner, city, assignee..."
+                placeholder="Search restaurant, owner, city..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
+                className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
               />
             </form>
 
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setPage(1)
-                setStatusFilter(e.target.value)
-              }}
-              className="h-12 min-w-[220px] rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-            >
-              <option value="">All statuses</option>
-              {SHEET_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-3">
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setPage(1)
+                  setStatusFilter(e.target.value)
+                }}
+                className="h-11 sm:h-12 flex-1 sm:min-w-[180px] rounded-2xl border border-slate-200 bg-slate-50 px-3 sm:px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
+              >
+                <option value="">All statuses</option>
+                {SHEET_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
 
-            <select
-              value={followUpFilter}
-              onChange={(e) => {
-                setPage(1)
-                setFollowUpFilter(e.target.value)
-              }}
-              className="h-12 min-w-[200px] rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-            >
-              <option value="">All follow-ups</option>
-              <option value="today">Due Today</option>
-              <option value="overdue">Overdue</option>
-              <option value="upcoming">Upcoming</option>
-            </select>
+              <select
+                value={followUpFilter}
+                onChange={(e) => {
+                  setPage(1)
+                  setFollowUpFilter(e.target.value)
+                }}
+                className="h-11 sm:h-12 flex-1 sm:min-w-[160px] rounded-2xl border border-slate-200 bg-slate-50 px-3 sm:px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
+              >
+                <option value="">All follow-ups</option>
+                <option value="today">Due Today</option>
+                <option value="overdue">Overdue</option>
+                <option value="upcoming">Upcoming</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Total Restaurants
+        {/* Stat cards */}
+        <div className="mt-4 sm:mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          <div className="rounded-2xl bg-slate-50 p-3 sm:p-4">
+            <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Total
             </div>
-            <div className="mt-2 text-3xl font-semibold text-slate-900">
+            <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-slate-900">
               {pagination.total}
             </div>
           </div>
 
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="rounded-2xl bg-slate-50 p-3 sm:p-4">
+            <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
               Due Today
             </div>
-            <div className="mt-2 text-3xl font-semibold text-slate-900">
+            <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-slate-900">
               {todayCount}
             </div>
           </div>
 
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="rounded-2xl bg-slate-50 p-3 sm:p-4">
+            <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
               Overdue
             </div>
-            <div className="mt-2 text-3xl font-semibold text-slate-900">
+            <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-red-600">
               {overdueCount}
             </div>
           </div>
 
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="rounded-2xl bg-slate-50 p-3 sm:p-4">
+            <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
               Upcoming
             </div>
-            <div className="mt-2 text-3xl font-semibold text-slate-900">
+            <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-slate-900">
               {upcomingCount}
             </div>
           </div>
         </div>
       </div>
 
+      {/* Restaurant List */}
       <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-14 border-b border-slate-200 bg-slate-50 px-6 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+
+        {/* Desktop table header — hidden on mobile */}
+        <div className="hidden lg:grid grid-cols-14 border-b border-slate-200 bg-slate-50 px-6 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <div className="col-span-4">Restaurant</div>
           <div className="col-span-2">Owner</div>
           <div className="col-span-2">Status</div>
@@ -315,57 +322,105 @@ export default function RestaurantsPage() {
                 key={restaurant.id}
                 type="button"
                 onClick={() => openRestaurant(restaurant)}
-                className="grid w-full grid-cols-14 items-center px-6 py-4 text-left transition hover:bg-slate-50"
+                className="w-full text-left transition hover:bg-slate-50 active:bg-slate-100"
               >
-                <div className="col-span-4 pr-4">
-                  <div className="text-[15px] font-semibold text-slate-900">
-                    {restaurant.restaurant_name || '—'}
+                {/* ═══ Desktop row — hidden on mobile ═══ */}
+                <div className="hidden lg:grid grid-cols-14 items-center px-6 py-4">
+                  <div className="col-span-4 pr-4">
+                    <div className="text-[15px] font-semibold text-slate-900">
+                      {restaurant.restaurant_name || '—'}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      {[restaurant.area, restaurant.city].filter(Boolean).join(', ') || 'No location'}
+                    </div>
                   </div>
-                  <div className="mt-1 text-sm text-slate-500">
-                    {[restaurant.area, restaurant.city].filter(Boolean).join(', ') || 'No location'}
+
+                  <div className="col-span-2 text-sm text-slate-700">
+                    {restaurant.owner_name || '—'}
+                  </div>
+
+                  <div className="col-span-2">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${getStatusClasses(
+                        restaurant.lead_status
+                      )}`}
+                    >
+                      {restaurant.lead_status || 'Unknown'}
+                    </span>
+                  </div>
+
+                  <div className="col-span-2 text-sm text-slate-700">
+                    {restaurant.assigned_to_name || 'Unassigned'}
+                  </div>
+
+                  <div className="col-span-2 text-sm text-slate-700">
+                    {formatFollowUpDate(restaurant.follow_up_date)}
+                  </div>
+
+                  <div className="col-span-2 text-sm text-slate-700">
+                    {restaurant.phone || '—'}
                   </div>
                 </div>
 
-                <div className="col-span-2 text-sm text-slate-700">
-                  {restaurant.owner_name || '—'}
-                </div>
+                {/* ═══ Mobile card — hidden on desktop ═══ */}
+                <div className="lg:hidden px-4 py-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[15px] font-semibold text-slate-900 leading-tight">
+                        {restaurant.restaurant_name || '—'}
+                      </div>
+                      <div className="mt-1 text-[13px] text-slate-500 leading-snug">
+                        {restaurant.owner_name || 'No owner'}
+                        {' · '}
+                        {[restaurant.area, restaurant.city].filter(Boolean).join(', ') || 'No location'}
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold flex-shrink-0 mt-0.5 ${getStatusClasses(
+                        restaurant.lead_status
+                      )}`}
+                    >
+                      {restaurant.lead_status || '—'}
+                    </span>
+                  </div>
 
-                <div className="col-span-2">
-                  <span
-                    className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${getStatusClasses(
-                      restaurant.lead_status
-                    )}`}
-                  >
-                    {restaurant.lead_status || 'Unknown'}
-                  </span>
-                </div>
-
-                <div className="col-span-2 text-sm text-slate-700">
-                  {restaurant.assigned_to_name || 'Unassigned'}
-                </div>
-
-                <div className="col-span-2 text-sm text-slate-700">
-                  {formatFollowUpDate(restaurant.follow_up_date)}
-                </div>
-
-                <div className="col-span-2 text-sm text-slate-700">
-                  {restaurant.phone || '—'}
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-slate-500">
+                    {restaurant.assigned_to_name && (
+                      <span className="inline-flex items-center gap-1">
+                        <span className="text-slate-400">&#x25CF;</span>
+                        {restaurant.assigned_to_name}
+                      </span>
+                    )}
+                    {restaurant.phone && (
+                      <span className="inline-flex items-center gap-1">
+                        <span className="text-green-500">&#x260E;</span>
+                        {restaurant.phone}
+                      </span>
+                    )}
+                    {restaurant.follow_up_date && (
+                      <span className="inline-flex items-center gap-1">
+                        <span className="text-blue-400">&#x25B6;</span>
+                        {formatFollowUpDate(restaurant.follow_up_date)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </button>
             ))}
           </div>
         )}
 
-        <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">
-          <div className="text-sm text-slate-500">
-            Page {pagination.page} of {pagination.totalPages} • Showing up to {pagination.pageSize} rows
+        {/* Pagination */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-200 px-4 sm:px-6 py-3 sm:py-4">
+          <div className="text-xs sm:text-sm text-slate-500">
+            Page {pagination.page} of {pagination.totalPages} · {pagination.total} total
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={pagination.page <= 1}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl border border-slate-200 px-3 sm:px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Previous
             </button>
@@ -373,7 +428,7 @@ export default function RestaurantsPage() {
             <button
               onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
               disabled={pagination.page >= pagination.totalPages}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl border border-slate-200 px-3 sm:px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Next
             </button>
@@ -381,15 +436,16 @@ export default function RestaurantsPage() {
         </div>
       </div>
 
+      {/* Detail Panel */}
       {selectedRestaurant && (
-  <RestaurantDetailPanel
-    open={panelOpen}
-    restaurant={selectedRestaurant}
-    onClose={() => setPanelOpen(false)}
-    executives={executives}
-    onSaved={() => loadRestaurants(page, search, statusFilter, followUpFilter)}
-  />
-)}
-</div>
+        <RestaurantDetailPanel
+          open={panelOpen}
+          restaurant={selectedRestaurant}
+          onClose={() => setPanelOpen(false)}
+          executives={executives}
+          onSaved={() => loadRestaurants(page, search, statusFilter, followUpFilter)}
+        />
+      )}
+    </div>
   )
 }
