@@ -9,7 +9,7 @@ const navItems = [
   { label: 'Restaurants', href: '/restaurants', section: 'Main' },
   { label: 'My Day', href: '/pipeline', section: 'Main' },
   { label: 'Team', href: '/team', section: 'Manage' },
-  { label: 'Activity Log', href: '/activity', section: 'Manage' },
+  { label: 'Reports', href: '/activity', section: 'Manage' },
 ]
 
 export default function Sidebar() {
