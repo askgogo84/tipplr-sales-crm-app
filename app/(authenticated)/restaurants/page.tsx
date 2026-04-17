@@ -390,3 +390,6 @@ export default function RestaurantsPage() {
     onSaved={() => loadRestaurants(page, search, statusFilter, followUpFilter)}
   />
 )}
+</div>
+  )
+}
