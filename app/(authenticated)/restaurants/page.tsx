@@ -381,13 +381,12 @@ export default function RestaurantsPage() {
         </div>
       </div>
 
-      <RestaurantDetailPanel
-        open={panelOpen}
-        restaurant={selectedRestaurant}
-        onClose={() => setPanelOpen(false)}
-        executives={executives}
-        onSaved={() => loadRestaurants(page, search, statusFilter, followUpFilter)}
-      />
-    </div>
-  )
-}
+      {selectedRestaurant && (
+  <RestaurantDetailPanel
+    open={panelOpen}
+    restaurant={selectedRestaurant}
+    onClose={() => setPanelOpen(false)}
+    executives={executives}
+    onSaved={() => loadRestaurants(page, search, statusFilter, followUpFilter)}
+  />
+)}
