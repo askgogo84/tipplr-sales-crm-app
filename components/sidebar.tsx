@@ -8,8 +8,10 @@ const navItems = [
   { label: 'Dashboard', href: '/dashboard', section: 'Main' },
   { label: 'Restaurants', href: '/restaurants', section: 'Main' },
   { label: 'My Day', href: '/pipeline', section: 'Main' },
+  { label: 'Bulk Assign', href: '/bulk-assign', section: 'Main' },
   { label: 'Team', href: '/team', section: 'Manage' },
-  { label: 'Activity Log', href: '/activity', section: 'Manage' },
+  { label: 'Reports', href: '/activity', section: 'Manage' },
+  { label: 'WA Digest', href: '/digest', section: 'Manage' },
 ]
 
 export default function Sidebar() {
@@ -45,7 +47,7 @@ export default function Sidebar() {
         <div className="mt-1 text-xs text-slate-400">Sales CRM</div>
       </div>
 
-      <div className="flex-1 px-3 py-5">
+      <div className="flex-1 px-3 py-5 overflow-y-auto">
         <div className="mb-8">
           <div className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
             Main
@@ -67,4 +69,3 @@ export default function Sidebar() {
     </aside>
   )
 }
-
