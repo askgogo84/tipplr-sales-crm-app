@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 import { google } from 'googleapis'
 import { createClient } from '@supabase/supabase-js'
 
