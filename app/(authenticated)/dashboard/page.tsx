@@ -10,6 +10,8 @@ type LeadRow = {
   assigned_to_name: string | null
   updated_at: string | null
   converted: boolean | null
+  source_sheet: string | null
+  is_deactivated: boolean | null
 }
 
 type RecentRestaurant = {
@@ -20,6 +22,8 @@ type RecentRestaurant = {
   assigned_to_name: string | null
   updated_at: string | null
   follow_up_date: string | null
+  source_sheet: string | null
+  is_deactivated: boolean | null
 }
 
 function timeAgo(d: string | null): string {
@@ -115,22 +119,34 @@ export default async function DashboardPage() {
     { data: statusRows },
     { data: recentRestaurants },
   ] = await Promise.all([
-    supabase.from('restaurants').select('*', { count: 'exact', head: true }),
     supabase
       .from('restaurants')
-      .select('lead_status, follow_up_date, assigned_to_name, updated_at, converted')
+      .select('*', { count: 'exact', head: true })
+      .neq('source_sheet', 'Deactivated Outlets'),
+
+    supabase
+      .from('restaurants')
+      .select(
+        'lead_status, follow_up_date, assigned_to_name, updated_at, converted, source_sheet, is_deactivated'
+      )
+      .neq('source_sheet', 'Deactivated Outlets')
       .range(0, 9999),
+
     supabase
       .from('restaurants')
-      .select('id, restaurant_name, owner_name, lead_status, assigned_to_name, updated_at, follow_up_date')
+      .select(
+        'id, restaurant_name, owner_name, lead_status, assigned_to_name, updated_at, follow_up_date, source_sheet, is_deactivated'
+      )
       .order('updated_at', { ascending: false, nullsFirst: false })
       .limit(10),
   ])
 
-  const leads = (statusRows || []) as LeadRow[]
+  const leads = ((statusRows || []) as LeadRow[]).filter(
+    (x) => x.source_sheet !== 'Deactivated Outlets' && x.is_deactivated !== true
+  )
+
   const restaurants = (recentRestaurants || []) as RecentRestaurant[]
 
-  // ===== FOCUS METRICS =====
   const dueTodayCount = leads.filter((x) => x.follow_up_date === today).length
   const overdueCount = leads.filter(
     (x) => x.follow_up_date && x.follow_up_date < today
@@ -151,7 +167,6 @@ export default async function DashboardPage() {
     return x.updated_at < sevenDaysAgo
   }).length
 
-  // ===== PIPELINE METRICS =====
   const leadCount = leads.filter((x) => (x.lead_status || '').toLowerCase() === 'lead').length
   const followupCount = leads.filter((x) => (x.lead_status || '').toLowerCase() === 'followup').length
   const agreedCount = leads.filter((x) => (x.lead_status || '').toLowerCase() === 'agreed').length
@@ -167,7 +182,6 @@ export default async function DashboardPage() {
       ? ((totalClosedOrAgreed / (totalCount || 1)) * 100).toFixed(1)
       : '0'
 
-  // ===== LEADERBOARD =====
   const repStats = new Map<string, { total: number; closed: number }>()
   leads.forEach((x) => {
     if (!x.assigned_to_name) return
@@ -193,7 +207,6 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-5 sm:space-y-6">
-      {/* HEADER */}
       <div className="flex flex-col gap-3 rounded-2xl sm:rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-xl sm:text-3xl lg:text-4xl font-semibold tracking-tight text-slate-900">
@@ -210,14 +223,13 @@ export default async function DashboardPage() {
         <SyncButton />
       </div>
 
-      {/* TOTAL RESTAURANTS — prominent standalone card */}
       <Link href="/restaurants" className="block">
         <div className="overflow-hidden rounded-2xl sm:rounded-[28px] border border-slate-200 bg-white shadow-sm hover:shadow-md transition active:scale-[0.99]">
           <div className="h-1.5 w-full bg-slate-800" />
           <div className="flex items-center justify-between px-5 py-4 sm:px-8 sm:py-6">
             <div>
               <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-widest text-slate-500">
-                Total Restaurants in CRM
+                Total Active Restaurants in CRM
               </div>
               <div className="mt-1 text-4xl sm:text-6xl font-bold tracking-tight text-slate-900">
                 {totalCount || 0}
@@ -234,48 +246,23 @@ export default async function DashboardPage() {
         </div>
       </Link>
 
-      {/* TODAY'S FOCUS */}
       <div>
         <h2 className="text-xs sm:text-sm font-semibold uppercase tracking-wide text-slate-500 mb-2 sm:mb-3 px-1">
           Today's Focus
         </h2>
         <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4">
-          <FocusCard
-            title="Due Today"
-            value={dueTodayCount}
-            subtitle="Follow-ups"
-            accent="bg-amber-500"
-          />
-          <FocusCard
-            title="Overdue"
-            value={overdueCount}
-            subtitle="Missed follow-ups"
-            accent="bg-rose-500"
-            urgent
-          />
-          <FocusCard
-            title="Closed Today"
-            value={todaysClosuresCount}
-            subtitle="Agreed / Converted"
-            accent="bg-emerald-500"
-          />
-          <FocusCard
-            title="Stale Leads"
-            value={staleCount}
-            subtitle="7+ days idle"
-            accent="bg-orange-500"
-          />
+          <FocusCard title="Due Today" value={dueTodayCount} subtitle="Follow-ups" accent="bg-amber-500" />
+          <FocusCard title="Overdue" value={overdueCount} subtitle="Missed follow-ups" accent="bg-rose-500" urgent />
+          <FocusCard title="Closed Today" value={todaysClosuresCount} subtitle="Agreed / Converted" accent="bg-emerald-500" />
+          <FocusCard title="Stale Leads" value={staleCount} subtitle="7+ days idle" accent="bg-orange-500" />
         </div>
       </div>
 
-      {/* PIPELINE OVERVIEW */}
       <div className="rounded-2xl sm:rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
         <div className="mb-3 sm:mb-4">
-          <h2 className="text-base sm:text-xl font-semibold text-slate-900">
-            Pipeline Overview
-          </h2>
+          <h2 className="text-base sm:text-xl font-semibold text-slate-900">Pipeline Overview</h2>
           <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            Status breakdown across all {totalCount || 0} restaurants
+            Status breakdown across all {totalCount || 0} active restaurants
           </p>
         </div>
 
@@ -289,13 +276,10 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* TEAM LEADERBOARD */}
       {leaderboard.length > 0 && (
         <div className="rounded-2xl sm:rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
           <div className="mb-3 sm:mb-4">
-            <h2 className="text-base sm:text-xl font-semibold text-slate-900">
-              Team Performance
-            </h2>
+            <h2 className="text-base sm:text-xl font-semibold text-slate-900">Team Performance</h2>
             <p className="mt-1 text-xs sm:text-sm text-slate-500">
               Top performers by closures
             </p>
@@ -340,7 +324,6 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* RECENTLY UPDATED */}
       <div className="rounded-2xl sm:rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
         <div className="mb-3 sm:mb-4 flex items-center justify-between gap-2">
           <div className="min-w-0">
@@ -359,7 +342,6 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        {/* Desktop table */}
         <div className="hidden md:block overflow-hidden rounded-2xl border border-slate-200">
           <div className="grid grid-cols-6 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <div>Restaurant</div>
@@ -395,7 +377,6 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Mobile cards */}
         <div className="md:hidden space-y-2">
           {restaurants.length > 0 ? (
             restaurants.map((r) => (

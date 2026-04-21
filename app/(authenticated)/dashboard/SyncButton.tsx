@@ -24,22 +24,24 @@ export default function SyncButton() {
         cache: 'no-store',
       })
 
-      if (!res.ok) {
-        throw new Error(`Sync failed (status ${res.status})`)
-      }
-
       const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || `Sync failed (status ${res.status})`)
+      }
 
       if (data.success) {
         const errorCount =
           (data.rowErrors?.length || 0) + (data.batchErrors?.length || 0)
 
+        const sheetCount = Array.isArray(data.sheets) ? data.sheets.length : 0
+
         setToast({
           type: 'success',
-          message: `Synced ${data.synced} restaurants from "${data.sheet}"`,
+          message: `Synced ${data.synced} restaurants from ${sheetCount} sheet(s)`,
           detail:
             errorCount > 0
-              ? `${errorCount} row(s) had issues — check console`
+              ? `${errorCount} issue(s) found — check console`
               : undefined,
         })
 
@@ -47,6 +49,7 @@ export default function SyncButton() {
           console.warn('Sync completed with errors:', {
             rowErrors: data.rowErrors,
             batchErrors: data.batchErrors,
+            sheets: data.sheets,
           })
         }
 
