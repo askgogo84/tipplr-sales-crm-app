@@ -6,43 +6,7 @@ import Link from 'next/link'
 import SyncButton from './SyncButton'
 import StatusPill from '@/components/StatusPill'
 import StaleBadge from '@/components/StaleBadge'
-
-type LeadRow = {
-  lead_status: string | null
-  follow_up_date: string | null
-  assigned_to_name: string | null
-  updated_at: string | null
-  converted: boolean | null
-  source_sheet: string | null
-  is_deactivated: boolean | null
-}
-
-type RecentRestaurant = {
-  id: string
-  restaurant_name: string | null
-  owner_name: string | null
-  lead_status: string | null
-  assigned_to_name: string | null
-  updated_at: string | null
-  follow_up_date: string | null
-  source_sheet: string | null
-  is_deactivated: boolean | null
-}
-
-function normalizeStatus(status: string | null, converted: boolean | null): string {
-  const s = (status || '').trim().toLowerCase()
-
-  if (converted === true) return 'converted'
-  if (['converted', 'already live', 'live'].includes(s)) return 'converted'
-  if (['agreed', 'agreement done'].includes(s)) return 'agreed'
-  if (['followup', 'follow up'].includes(s)) return 'followup'
-  if (['call back', 'callback', 'called back'].includes(s)) return 'call back'
-  if (["couldn't connect", 'couldnt connect', 'not reachable'].includes(s)) return "couldn't connect"
-  if (['not interested', 'not live', 'rejected'].includes(s)) return 'not interested'
-  if (['lead', 'new'].includes(s)) return 'lead'
-  if (['visit', 'visited'].includes(s)) return 'visit'
-  return s || 'lead'
-}
+import { fetchAllActiveRestaurants, buildCrmMetrics } from '@/lib/crm-metrics'
 
 function timeAgo(d: string | null): string {
   if (!d) return '—'
@@ -54,7 +18,42 @@ function timeAgo(d: string | null): string {
   if (hrs < 24) return `${hrs}h ago`
   const days = Math.floor(hrs / 24)
   if (days < 30) return `${days}d ago`
-  return new Date(d).toLocaleDateString()
+  return new Date(d).toLocaleDateString('en-IN')
+}
+
+function BigMetricCard({
+  title,
+  value,
+  subtitle,
+  accent,
+  href,
+}: {
+  title: string
+  value: number
+  subtitle?: string
+  accent: string
+  href?: string
+}) {
+  const content = (
+    <div className="overflow-hidden rounded-2xl sm:rounded-[28px] border border-slate-200 bg-white shadow-sm hover:shadow-md transition active:scale-[0.99]">
+      <div className={`h-1.5 w-full ${accent}`} />
+      <div className="px-5 py-4 sm:px-8 sm:py-6">
+        <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-widest text-slate-500">
+          {title}
+        </div>
+        <div className="mt-1 text-4xl sm:text-6xl font-bold tracking-tight text-slate-900">
+          {value}
+        </div>
+        {subtitle && (
+          <div className="mt-1 text-xs sm:text-sm text-slate-500">
+            {subtitle}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  return href ? <Link href={href}>{content}</Link> : content
 }
 
 function FocusCard({
@@ -63,22 +62,20 @@ function FocusCard({
   subtitle,
   accent,
   urgent,
-  href,
 }: {
   title: string
   value: number
   subtitle?: string
   accent: string
   urgent?: boolean
-  href?: string
 }) {
-  const content = (
+  return (
     <div
-      className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition ${
+      className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${
         urgent && value > 0
           ? 'border-rose-300 ring-2 ring-rose-100'
           : 'border-slate-200'
-      } ${href ? 'hover:shadow-md active:scale-[0.99]' : ''}`}
+      }`}
     >
       <div className={`h-1 w-full ${accent}`} />
       <div className="p-3 sm:p-5">
@@ -96,8 +93,6 @@ function FocusCard({
       </div>
     </div>
   )
-
-  return href ? <Link href={href}>{content}</Link> : content
 }
 
 function MetricPill({
@@ -125,112 +120,19 @@ export default async function DashboardPage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  const today = new Date().toISOString().slice(0, 10)
+  const rows = await fetchAllActiveRestaurants(supabase)
+  const metrics = buildCrmMetrics(rows)
+
+  const recentRestaurants = rows
+    .slice()
+    .sort((a, b) => {
+      const aa = a.updated_at ? new Date(a.updated_at).getTime() : 0
+      const bb = b.updated_at ? new Date(b.updated_at).getTime() : 0
+      return bb - aa
+    })
+    .slice(0, 10)
+
   const now = new Date()
-  const sevenDaysAgo = new Date(
-    now.getTime() - 7 * 24 * 60 * 60 * 1000
-  ).toISOString()
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
-  const todayStartIso = todayStart.toISOString()
-
-  const [
-    { data: statusRows, error: statusError },
-    { data: recentRestaurants, error: recentError },
-  ] = await Promise.all([
-    supabase
-      .from('restaurants')
-      .select(
-        'lead_status, follow_up_date, assigned_to_name, updated_at, converted, source_sheet, is_deactivated'
-      )
-      .not('source_sheet', 'is', null)
-      .neq('source_sheet', 'Deactivated Outlets')
-      .range(0, 20000),
-
-    supabase
-      .from('restaurants')
-      .select(
-        'id, restaurant_name, owner_name, lead_status, assigned_to_name, updated_at, follow_up_date, source_sheet, is_deactivated'
-      )
-      .not('source_sheet', 'is', null)
-      .neq('source_sheet', 'Deactivated Outlets')
-      .order('updated_at', { ascending: false, nullsFirst: false })
-      .limit(10),
-  ])
-
-  if (statusError || recentError) {
-    return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
-        Failed to load dashboard data.
-      </div>
-    )
-  }
-
-  const leads = ((statusRows || []) as LeadRow[])
-    .filter((x) => x.source_sheet !== 'Deactivated Outlets' && x.is_deactivated !== true)
-    .map((x) => ({
-      ...x,
-      normalized_status: normalizeStatus(x.lead_status, x.converted),
-    }))
-
-  const restaurants = ((recentRestaurants || []) as RecentRestaurant[]).filter(
-    (x) => x.source_sheet !== null && x.source_sheet !== 'Deactivated Outlets'
-  )
-
-  const totalCount = leads.length
-
-  const dueTodayCount = leads.filter((x) => x.follow_up_date === today).length
-  const overdueCount = leads.filter(
-    (x) => x.follow_up_date && x.follow_up_date < today
-  ).length
-
-  const todaysClosuresCount = leads.filter((x) => {
-    if (!x.updated_at) return false
-    return ['agreed', 'converted'].includes(x.normalized_status) && x.updated_at >= todayStartIso
-  }).length
-
-  const activeStatuses = ['lead', 'followup', 'call back', 'visit', "couldn't connect"]
-  const staleCount = leads.filter((x) => {
-    if (!activeStatuses.includes(x.normalized_status)) return false
-    if (!x.updated_at) return false
-    return x.updated_at < sevenDaysAgo
-  }).length
-
-  const leadCount = leads.filter((x) => x.normalized_status === 'lead').length
-  const followupCount = leads.filter((x) => x.normalized_status === 'followup').length
-  const agreedCount = leads.filter((x) => x.normalized_status === 'agreed').length
-  const convertedCount = leads.filter((x) => x.normalized_status === 'converted').length
-  const notInterestedCount = leads.filter((x) => x.normalized_status === 'not interested').length
-  const callBackCount = leads.filter((x) => x.normalized_status === 'call back').length
-
-  const totalClosedOrAgreed = agreedCount + convertedCount
-  const conversionRate =
-    totalCount > 0 ? ((totalClosedOrAgreed / totalCount) * 100).toFixed(1) : '0'
-
-  const repStats = new Map<string, { total: number; closed: number }>()
-  leads.forEach((x) => {
-    if (!x.assigned_to_name) return
-    const name = x.assigned_to_name.trim()
-    if (!name) return
-
-    if (!repStats.has(name)) repStats.set(name, { total: 0, closed: 0 })
-    const stats = repStats.get(name)!
-    stats.total++
-
-    if (['agreed', 'converted'].includes(x.normalized_status)) {
-      stats.closed++
-    }
-  })
-
-  const leaderboard = Array.from(repStats.entries())
-    .map(([name, stats]) => ({
-      name,
-      total: stats.total,
-      closed: stats.closed,
-      rate: stats.total > 0 ? ((stats.closed / stats.total) * 100).toFixed(0) : '0',
-    }))
-    .sort((a, b) => b.closed - a.closed)
-    .slice(0, 5)
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -250,40 +152,46 @@ export default async function DashboardPage() {
         <SyncButton />
       </div>
 
-      <Link href="/restaurants" className="block">
-        <div className="overflow-hidden rounded-2xl sm:rounded-[28px] border border-slate-200 bg-white shadow-sm hover:shadow-md transition active:scale-[0.99]">
-          <div className="h-1.5 w-full bg-slate-800" />
-          <div className="flex items-center justify-between px-5 py-4 sm:px-8 sm:py-6">
-            <div>
-              <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-widest text-slate-500">
-                Total Active Restaurants in CRM
-              </div>
-              <div className="mt-1 text-4xl sm:text-6xl font-bold tracking-tight text-slate-900">
-                {totalCount}
-              </div>
-              <div className="mt-1 text-xs sm:text-sm text-slate-500">
-                {conversionRate}% overall conversion rate · tap to view all
-              </div>
-            </div>
-            <div className="hidden sm:flex flex-col items-end gap-2">
-              <div className="text-2xl font-bold text-emerald-600">
-                {agreedCount + convertedCount}
-              </div>
-              <div className="text-xs text-slate-500">Agreed + Converted</div>
-            </div>
-          </div>
-        </div>
-      </Link>
+      <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
+        <BigMetricCard
+          title="Total Restaurants"
+          value={metrics.total}
+          subtitle={`${metrics.conversionRate}% overall conversion rate`}
+          accent="bg-slate-800"
+          href="/restaurants"
+        />
+        <BigMetricCard
+          title="Converted Till Date"
+          value={metrics.convertedTillDate}
+          subtitle="Across all synced tabs"
+          accent="bg-emerald-500"
+          href="/restaurants?status=Converted"
+        />
+        <BigMetricCard
+          title="Agreed Till Date"
+          value={metrics.agreedTillDate}
+          subtitle="Ready to close"
+          accent="bg-teal-500"
+          href="/restaurants?status=Agreed"
+        />
+        <BigMetricCard
+          title="Unassigned"
+          value={metrics.unassigned}
+          subtitle="Need owner / rep mapping"
+          accent="bg-amber-500"
+          href="/restaurants"
+        />
+      </div>
 
       <div>
         <h2 className="text-xs sm:text-sm font-semibold uppercase tracking-wide text-slate-500 mb-2 sm:mb-3 px-1">
           Today's Focus
         </h2>
         <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4">
-          <FocusCard title="Due Today" value={dueTodayCount} subtitle="Follow-ups" accent="bg-amber-500" />
-          <FocusCard title="Overdue" value={overdueCount} subtitle="Missed follow-ups" accent="bg-rose-500" urgent />
-          <FocusCard title="Closed Today" value={todaysClosuresCount} subtitle="Agreed / Converted" accent="bg-emerald-500" />
-          <FocusCard title="Stale Leads" value={staleCount} subtitle="7+ days idle" accent="bg-orange-500" />
+          <FocusCard title="Due Today" value={metrics.dueToday} subtitle="Follow-ups" accent="bg-amber-500" />
+          <FocusCard title="Overdue" value={metrics.overdue} subtitle="Missed follow-ups" accent="bg-rose-500" urgent />
+          <FocusCard title="Stale Leads" value={metrics.stale} subtitle="7+ days idle" accent="bg-orange-500" />
+          <FocusCard title="Agreed + Converted" value={metrics.closuresTillDate} subtitle="Total closures till date" accent="bg-emerald-500" />
         </div>
       </div>
 
@@ -293,33 +201,33 @@ export default async function DashboardPage() {
             Pipeline Overview
           </h2>
           <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            Status breakdown across all {totalCount} active restaurants
+            Status breakdown across all {metrics.total} active restaurants
           </p>
         </div>
 
         <div className="grid gap-2 grid-cols-3 sm:grid-cols-6">
-          <MetricPill label="Lead" value={leadCount} color="text-slate-700" />
-          <MetricPill label="Followup" value={followupCount} color="text-blue-600" />
-          <MetricPill label="Call Back" value={callBackCount} color="text-indigo-600" />
-          <MetricPill label="Agreed" value={agreedCount} color="text-emerald-600" />
-          <MetricPill label="Converted" value={convertedCount} color="text-green-600" />
-          <MetricPill label="Not Interested" value={notInterestedCount} color="text-rose-600" />
+          <MetricPill label="Lead" value={metrics.pipeline.lead} color="text-slate-700" />
+          <MetricPill label="Followup" value={metrics.pipeline.followup} color="text-blue-600" />
+          <MetricPill label="Call Back" value={metrics.pipeline.callBack} color="text-indigo-600" />
+          <MetricPill label="Agreed" value={metrics.pipeline.agreed} color="text-emerald-600" />
+          <MetricPill label="Converted" value={metrics.pipeline.converted} color="text-green-600" />
+          <MetricPill label="Not Interested" value={metrics.pipeline.notInterested} color="text-rose-600" />
         </div>
       </div>
 
-      {leaderboard.length > 0 && (
+      {metrics.leaderboard.length > 0 && (
         <div className="rounded-2xl sm:rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
           <div className="mb-3 sm:mb-4">
             <h2 className="text-base sm:text-xl font-semibold text-slate-900">
               Team Performance
             </h2>
             <p className="mt-1 text-xs sm:text-sm text-slate-500">
-              Top performers by closures
+              Top performers by closures across all synced tabs
             </p>
           </div>
 
           <div className="space-y-2">
-            {leaderboard.map((rep, idx) => (
+            {metrics.leaderboard.slice(0, 5).map((rep, idx) => (
               <div
                 key={rep.name}
                 className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3"
@@ -384,8 +292,8 @@ export default async function DashboardPage() {
             <div>Follow-up</div>
             <div>Updated</div>
           </div>
-          {restaurants.length > 0 ? (
-            restaurants.map((r) => (
+          {recentRestaurants.length > 0 ? (
+            recentRestaurants.map((r) => (
               <Link
                 key={r.id}
                 href="/restaurants"
@@ -411,8 +319,8 @@ export default async function DashboardPage() {
         </div>
 
         <div className="md:hidden space-y-2">
-          {restaurants.length > 0 ? (
-            restaurants.map((r) => (
+          {recentRestaurants.length > 0 ? (
+            recentRestaurants.map((r) => (
               <Link
                 key={r.id}
                 href="/restaurants"

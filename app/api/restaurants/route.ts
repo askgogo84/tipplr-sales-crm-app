@@ -2,6 +2,11 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import {
+  fetchAllActiveRestaurants,
+  buildCrmMetrics,
+  normalizeStatus,
+} from '@/lib/crm-metrics'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,74 +32,83 @@ export async function GET(req: NextRequest) {
 
     const page = Math.max(Number(searchParams.get('page') || '1'), 1)
     const pageSize = Math.max(Number(searchParams.get('pageSize') || '100'), 1)
-    const search = (searchParams.get('search') || '').trim()
+    const search = (searchParams.get('search') || '').trim().toLowerCase()
     const status = (searchParams.get('status') || '').trim()
-    const assignedTo = (searchParams.get('assignedTo') || '').trim()
     const followUp = (searchParams.get('followUp') || '').trim()
+    const assignedTo = (searchParams.get('assignedTo') || '').trim()
 
-    const from = (page - 1) * pageSize
-    const to = from + pageSize - 1
     const today = new Date().toISOString().slice(0, 10)
 
-    let query = supabase
-      .from('restaurants')
-      .select('*', { count: 'exact' })
-      .not('source_sheet', 'is', null)
-      .neq('source_sheet', 'Deactivated Outlets')
+    const allRows = await fetchAllActiveRestaurants(
+      supabase,
+      'id, restaurant_name, owner_name, phone, city, area, lead_status, assigned_to_name, follow_up_date, follow_up_status, last_follow_up_note, remarks, updated_at, converted, source_sheet, is_deactivated'
+    )
+
+    const stats = buildCrmMetrics(allRows)
+
+    let filtered = allRows.map((row: any) => ({
+      ...row,
+      lead_status: normalizeStatus(row.lead_status, row.converted),
+    }))
 
     if (search) {
-      query = query.or(
+      filtered = filtered.filter((row: any) =>
         [
-          `restaurant_name.ilike.%${search}%`,
-          `owner_name.ilike.%${search}%`,
-          `phone.ilike.%${search}%`,
-          `assigned_to_name.ilike.%${search}%`,
-          `city.ilike.%${search}%`,
-          `area.ilike.%${search}%`,
-          `source_sheet.ilike.%${search}%`,
-        ].join(',')
+          row.restaurant_name,
+          row.owner_name,
+          row.phone,
+          row.assigned_to_name,
+          row.city,
+          row.area,
+          row.source_sheet,
+        ]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(search))
       )
     }
 
     if (status) {
-      query = query.eq('lead_status', status)
+      filtered = filtered.filter((row: any) => row.lead_status === status)
     }
 
     if (assignedTo) {
-      query = query.eq('assigned_to_name', assignedTo)
+      filtered = filtered.filter((row: any) => row.assigned_to_name === assignedTo)
     }
 
     if (followUp === 'today') {
-      query = query.eq('follow_up_date', today)
+      filtered = filtered.filter((row: any) => row.follow_up_date === today)
     } else if (followUp === 'overdue') {
-      query = query.lt('follow_up_date', today)
+      filtered = filtered.filter((row: any) => row.follow_up_date && row.follow_up_date < today)
     } else if (followUp === 'upcoming') {
-      query = query.gt('follow_up_date', today)
+      filtered = filtered.filter((row: any) => row.follow_up_date && row.follow_up_date > today)
     }
 
-    query = query
-      .order('updated_at', { ascending: false, nullsFirst: false })
-      .order('source_gid', { ascending: true, nullsFirst: false })
-      .order('source_row_number', { ascending: true, nullsFirst: false })
-      .range(from, to)
+    filtered.sort((a: any, b: any) => {
+      const aa = a.updated_at ? new Date(a.updated_at).getTime() : 0
+      const bb = b.updated_at ? new Date(b.updated_at).getTime() : 0
+      return bb - aa
+    })
 
-    const { data, error, count } = await query
-
-    if (error) {
-      return NextResponse.json(
-        { success: false, error: error.message, data: [] },
-        { status: 500 }
-      )
-    }
+    const total = filtered.length
+    const from = (page - 1) * pageSize
+    const to = from + pageSize
+    const paged = filtered.slice(from, to)
 
     return NextResponse.json({
       success: true,
-      data: data || [],
+      data: paged,
+      stats: {
+        total: stats.total,
+        convertedTillDate: stats.convertedTillDate,
+        agreedTillDate: stats.agreedTillDate,
+        closuresTillDate: stats.closuresTillDate,
+        unassigned: stats.unassigned,
+      },
       pagination: {
         page,
         pageSize,
-        total: count || 0,
-        totalPages: Math.max(Math.ceil((count || 0) / pageSize), 1),
+        total,
+        totalPages: Math.max(Math.ceil(total / pageSize), 1),
       },
     })
   } catch (error) {
@@ -168,8 +182,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Unknown server error'
+    const message = error instanceof Error ? error.message : 'Unknown server error'
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

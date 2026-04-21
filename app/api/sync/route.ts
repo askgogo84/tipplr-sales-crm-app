@@ -353,7 +353,7 @@ export async function GET() {
             source_gid,
             source_row_number,
             is_deactivated: Boolean(config.isDeactivated),
-            updated_at: new Date().toISOString(),
+            synced_at: new Date().toISOString(),
           })
 
           currentSheetSynced++

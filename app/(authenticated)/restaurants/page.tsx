@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import RestaurantDetailPanel from '@/components/restaurant-detail'
 
 type Restaurant = {
@@ -30,42 +30,42 @@ type Pagination = {
   totalPages: number
 }
 
+type Stats = {
+  total: number
+  convertedTillDate: number
+  agreedTillDate: number
+  closuresTillDate: number
+  unassigned: number
+}
+
 const SHEET_STATUSES = [
   'Agreed',
-  'Not Interested',
-  'Visit',
-  'Incorrect Number',
-  'Followup',
-  "Couldn't Connect",
-  'Call Back',
-  'Wrong Number',
-  'Invalid Number',
-  'Permanently Closed',
-  'Temporarily Closed',
   'Converted',
+  'Lead',
+  'Followup',
+  'Call Back',
+  "Couldn't Connect",
+  'Visit',
+  'Not Interested',
+  'Wrong Number',
 ]
 
 function getStatusClasses(status: string | null) {
   switch ((status || '').toLowerCase()) {
     case 'agreed':
       return 'bg-emerald-100 text-emerald-700'
+    case 'converted':
+      return 'bg-green-100 text-green-700'
     case 'not interested':
       return 'bg-slate-100 text-slate-700'
     case 'visit':
       return 'bg-amber-100 text-amber-700'
-    case 'incorrect number':
     case 'wrong number':
-    case 'invalid number':
       return 'bg-rose-100 text-rose-700'
     case "couldn't connect":
     case 'call back':
     case 'followup':
       return 'bg-blue-100 text-blue-700'
-    case 'temporarily closed':
-    case 'permanently closed':
-      return 'bg-gray-200 text-gray-700'
-    case 'converted':
-      return 'bg-green-100 text-green-700'
     default:
       return 'bg-slate-100 text-slate-700'
   }
@@ -92,6 +92,14 @@ export default function RestaurantsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [followUpFilter, setFollowUpFilter] = useState('')
   const [page, setPage] = useState(1)
+
+  const [stats, setStats] = useState<Stats>({
+    total: 0,
+    convertedTillDate: 0,
+    agreedTillDate: 0,
+    closuresTillDate: 0,
+    unassigned: 0,
+  })
 
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
@@ -131,6 +139,15 @@ export default function RestaurantsPage() {
       }
 
       setRestaurants(data.data || [])
+      setStats(
+        data.stats || {
+          total: 0,
+          convertedTillDate: 0,
+          agreedTillDate: 0,
+          closuresTillDate: 0,
+          unassigned: 0,
+        }
+      )
       setPagination(
         data.pagination || {
           page: currentPage,
@@ -184,124 +201,102 @@ export default function RestaurantsPage() {
     setPanelOpen(true)
   }
 
-  const todayCount = useMemo(
-    () => restaurants.filter((r) => r.follow_up_date === new Date().toISOString().slice(0, 10)).length,
-    [restaurants]
-  )
-
-  const overdueCount = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    return restaurants.filter((r) => r.follow_up_date && r.follow_up_date < today).length
-  }, [restaurants])
-
-  const upcomingCount = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    return restaurants.filter((r) => r.follow_up_date && r.follow_up_date > today).length
-  }, [restaurants])
-
   return (
     <div className="space-y-5">
-      {/* Header + Filters */}
       <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-slate-900">
-              Restaurants
-            </h1>
-            <p className="mt-1 sm:mt-2 text-sm text-slate-500">
-              Track restaurants, owners, assignments, and follow-ups
-            </p>
+        <div>
+          <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-slate-900">
+            Restaurants
+          </h1>
+          <p className="mt-1 sm:mt-2 text-sm text-slate-500">
+            Track restaurants, owners, assignments, and follow-ups
+          </p>
+        </div>
+
+        <div className="mt-4 sm:mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          <div className="rounded-2xl bg-slate-50 p-3 sm:p-4">
+            <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Total Restaurants
+            </div>
+            <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-slate-900">
+              {stats.total}
+            </div>
           </div>
 
-          <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
-            <form onSubmit={handleSearchSubmit} className="w-full sm:min-w-[320px]">
-              <input
-                type="text"
-                placeholder="Search restaurant, owner, city..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-              />
-            </form>
+          <div className="rounded-2xl bg-slate-50 p-3 sm:p-4">
+            <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Total Converted Till Date
+            </div>
+            <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-emerald-600">
+              {stats.convertedTillDate}
+            </div>
+          </div>
 
-            <div className="flex gap-3">
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setPage(1)
-                  setStatusFilter(e.target.value)
-                }}
-                className="h-11 sm:h-12 flex-1 sm:min-w-[180px] rounded-2xl border border-slate-200 bg-slate-50 px-3 sm:px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-              >
-                <option value="">All statuses</option>
-                {SHEET_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
+          <div className="rounded-2xl bg-slate-50 p-3 sm:p-4">
+            <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Agreed Till Date
+            </div>
+            <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-teal-600">
+              {stats.agreedTillDate}
+            </div>
+          </div>
 
-              <select
-                value={followUpFilter}
-                onChange={(e) => {
-                  setPage(1)
-                  setFollowUpFilter(e.target.value)
-                }}
-                className="h-11 sm:h-12 flex-1 sm:min-w-[160px] rounded-2xl border border-slate-200 bg-slate-50 px-3 sm:px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-              >
-                <option value="">All follow-ups</option>
-                <option value="today">Due Today</option>
-                <option value="overdue">Overdue</option>
-                <option value="upcoming">Upcoming</option>
-              </select>
+          <div className="rounded-2xl bg-slate-50 p-3 sm:p-4">
+            <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Unassigned
+            </div>
+            <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-amber-600">
+              {stats.unassigned}
             </div>
           </div>
         </div>
 
-        {/* Stat cards */}
-        <div className="mt-4 sm:mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-          <div className="rounded-2xl bg-slate-50 p-3 sm:p-4">
-            <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Total
-            </div>
-            <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-slate-900">
-              {pagination.total}
-            </div>
-          </div>
+        <div className="mt-4 sm:mt-6 flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-end">
+          <form onSubmit={handleSearchSubmit} className="w-full xl:max-w-[360px]">
+            <input
+              type="text"
+              placeholder="Search restaurant, owner, city..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
+            />
+          </form>
 
-          <div className="rounded-2xl bg-slate-50 p-3 sm:p-4">
-            <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Due Today
-            </div>
-            <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-slate-900">
-              {todayCount}
-            </div>
-          </div>
+          <div className="flex gap-3">
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setPage(1)
+                setStatusFilter(e.target.value)
+              }}
+              className="h-11 sm:h-12 flex-1 sm:min-w-[180px] rounded-2xl border border-slate-200 bg-slate-50 px-3 sm:px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
+            >
+              <option value="">All statuses</option>
+              {SHEET_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
 
-          <div className="rounded-2xl bg-slate-50 p-3 sm:p-4">
-            <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Overdue
-            </div>
-            <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-red-600">
-              {overdueCount}
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-slate-50 p-3 sm:p-4">
-            <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Upcoming
-            </div>
-            <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-slate-900">
-              {upcomingCount}
-            </div>
+            <select
+              value={followUpFilter}
+              onChange={(e) => {
+                setPage(1)
+                setFollowUpFilter(e.target.value)
+              }}
+              className="h-11 sm:h-12 flex-1 sm:min-w-[160px] rounded-2xl border border-slate-200 bg-slate-50 px-3 sm:px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
+            >
+              <option value="">All follow-ups</option>
+              <option value="today">Due Today</option>
+              <option value="overdue">Overdue</option>
+              <option value="upcoming">Upcoming</option>
+            </select>
           </div>
         </div>
       </div>
 
-      {/* Restaurant List */}
       <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-
-        {/* Desktop table header — hidden on mobile */}
         <div className="hidden lg:grid grid-cols-14 border-b border-slate-200 bg-slate-50 px-6 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <div className="col-span-4">Restaurant</div>
           <div className="col-span-2">Owner</div>
@@ -324,7 +319,6 @@ export default function RestaurantsPage() {
                 onClick={() => openRestaurant(restaurant)}
                 className="w-full text-left transition hover:bg-slate-50 active:bg-slate-100"
               >
-                {/* ═══ Desktop row — hidden on mobile ═══ */}
                 <div className="hidden lg:grid grid-cols-14 items-center px-6 py-4">
                   <div className="col-span-4 pr-4">
                     <div className="text-[15px] font-semibold text-slate-900">
@@ -362,7 +356,6 @@ export default function RestaurantsPage() {
                   </div>
                 </div>
 
-                {/* ═══ Mobile card — hidden on desktop ═══ */}
                 <div className="lg:hidden px-4 py-3.5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
@@ -387,19 +380,19 @@ export default function RestaurantsPage() {
                   <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-slate-500">
                     {restaurant.assigned_to_name && (
                       <span className="inline-flex items-center gap-1">
-                        <span className="text-slate-400">&#x25CF;</span>
+                        <span className="text-slate-400">●</span>
                         {restaurant.assigned_to_name}
                       </span>
                     )}
                     {restaurant.phone && (
                       <span className="inline-flex items-center gap-1">
-                        <span className="text-green-500">&#x260E;</span>
+                        <span className="text-green-500">☎</span>
                         {restaurant.phone}
                       </span>
                     )}
                     {restaurant.follow_up_date && (
                       <span className="inline-flex items-center gap-1">
-                        <span className="text-blue-400">&#x25B6;</span>
+                        <span className="text-blue-400">▶</span>
                         {formatFollowUpDate(restaurant.follow_up_date)}
                       </span>
                     )}
@@ -410,10 +403,9 @@ export default function RestaurantsPage() {
           </div>
         )}
 
-        {/* Pagination */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-200 px-4 sm:px-6 py-3 sm:py-4">
           <div className="text-xs sm:text-sm text-slate-500">
-            Page {pagination.page} of {pagination.totalPages} · {pagination.total} total
+            Page {pagination.page} of {pagination.totalPages} · {pagination.total} filtered
           </div>
 
           <div className="flex items-center gap-2">
@@ -436,7 +428,6 @@ export default function RestaurantsPage() {
         </div>
       </div>
 
-      {/* Detail Panel */}
       {selectedRestaurant && (
         <RestaurantDetailPanel
           open={panelOpen}
