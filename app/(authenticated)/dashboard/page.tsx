@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import SyncButton from './SyncButton'
@@ -106,25 +107,28 @@ function MetricPill({
 export default async function DashboardPage() {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
   const today = new Date().toISOString().slice(0, 10)
   const now = new Date()
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const sevenDaysAgo = new Date(
+    now.getTime() - 7 * 24 * 60 * 60 * 1000
+  ).toISOString()
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
   const todayStartIso = todayStart.toISOString()
 
   const [
-    { count: totalCount },
-    { data: statusRows },
-    { data: recentRestaurants },
+    { count: totalCount, error: totalError },
+    { data: statusRows, error: statusError },
+    { data: recentRestaurants, error: recentError },
   ] = await Promise.all([
     supabase
       .from('restaurants')
       .select('*', { count: 'exact', head: true })
-      .neq('source_sheet', 'Deactivated Outlets'),
+      .neq('source_sheet', 'Deactivated Outlets')
+      .not('source_sheet', 'is', null),
 
     supabase
       .from('restaurants')
@@ -132,6 +136,7 @@ export default async function DashboardPage() {
         'lead_status, follow_up_date, assigned_to_name, updated_at, converted, source_sheet, is_deactivated'
       )
       .neq('source_sheet', 'Deactivated Outlets')
+      .not('source_sheet', 'is', null)
       .range(0, 9999),
 
     supabase
@@ -139,15 +144,26 @@ export default async function DashboardPage() {
       .select(
         'id, restaurant_name, owner_name, lead_status, assigned_to_name, updated_at, follow_up_date, source_sheet, is_deactivated'
       )
+      .not('source_sheet', 'is', null)
       .order('updated_at', { ascending: false, nullsFirst: false })
       .limit(10),
   ])
+
+  if (totalError || statusError || recentError) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+        Failed to load dashboard data.
+      </div>
+    )
+  }
 
   const leads = ((statusRows || []) as LeadRow[]).filter(
     (x) => x.source_sheet !== 'Deactivated Outlets' && x.is_deactivated !== true
   )
 
-  const restaurants = (recentRestaurants || []) as RecentRestaurant[]
+  const restaurants = ((recentRestaurants || []) as RecentRestaurant[]).filter(
+    (x) => x.source_sheet !== null
+  )
 
   const dueTodayCount = leads.filter((x) => x.follow_up_date === today).length
   const overdueCount = leads.filter(
@@ -169,14 +185,24 @@ export default async function DashboardPage() {
     return x.updated_at < sevenDaysAgo
   }).length
 
-  const leadCount = leads.filter((x) => (x.lead_status || '').toLowerCase() === 'lead').length
-  const followupCount = leads.filter((x) => (x.lead_status || '').toLowerCase() === 'followup').length
-  const agreedCount = leads.filter((x) => (x.lead_status || '').toLowerCase() === 'agreed').length
-  const convertedCount = leads.filter((x) => (x.lead_status || '').toLowerCase() === 'converted').length
+  const leadCount = leads.filter(
+    (x) => (x.lead_status || '').toLowerCase() === 'lead'
+  ).length
+  const followupCount = leads.filter(
+    (x) => (x.lead_status || '').toLowerCase() === 'followup'
+  ).length
+  const agreedCount = leads.filter(
+    (x) => (x.lead_status || '').toLowerCase() === 'agreed'
+  ).length
+  const convertedCount = leads.filter(
+    (x) => (x.lead_status || '').toLowerCase() === 'converted'
+  ).length
   const notInterestedCount = leads.filter(
     (x) => (x.lead_status || '').toLowerCase() === 'not interested'
   ).length
-  const callBackCount = leads.filter((x) => (x.lead_status || '').toLowerCase() === 'call back').length
+  const callBackCount = leads.filter(
+    (x) => (x.lead_status || '').toLowerCase() === 'call back'
+  ).length
 
   const totalClosedOrAgreed = agreedCount + convertedCount
   const conversionRate =
@@ -241,7 +267,9 @@ export default async function DashboardPage() {
               </div>
             </div>
             <div className="hidden sm:flex flex-col items-end gap-2">
-              <div className="text-2xl font-bold text-emerald-600">{agreedCount + convertedCount}</div>
+              <div className="text-2xl font-bold text-emerald-600">
+                {agreedCount + convertedCount}
+              </div>
               <div className="text-xs text-slate-500">Agreed + Converted</div>
             </div>
           </div>
@@ -253,16 +281,39 @@ export default async function DashboardPage() {
           Today's Focus
         </h2>
         <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4">
-          <FocusCard title="Due Today" value={dueTodayCount} subtitle="Follow-ups" accent="bg-amber-500" />
-          <FocusCard title="Overdue" value={overdueCount} subtitle="Missed follow-ups" accent="bg-rose-500" urgent />
-          <FocusCard title="Closed Today" value={todaysClosuresCount} subtitle="Agreed / Converted" accent="bg-emerald-500" />
-          <FocusCard title="Stale Leads" value={staleCount} subtitle="7+ days idle" accent="bg-orange-500" />
+          <FocusCard
+            title="Due Today"
+            value={dueTodayCount}
+            subtitle="Follow-ups"
+            accent="bg-amber-500"
+          />
+          <FocusCard
+            title="Overdue"
+            value={overdueCount}
+            subtitle="Missed follow-ups"
+            accent="bg-rose-500"
+            urgent
+          />
+          <FocusCard
+            title="Closed Today"
+            value={todaysClosuresCount}
+            subtitle="Agreed / Converted"
+            accent="bg-emerald-500"
+          />
+          <FocusCard
+            title="Stale Leads"
+            value={staleCount}
+            subtitle="7+ days idle"
+            accent="bg-orange-500"
+          />
         </div>
       </div>
 
       <div className="rounded-2xl sm:rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
         <div className="mb-3 sm:mb-4">
-          <h2 className="text-base sm:text-xl font-semibold text-slate-900">Pipeline Overview</h2>
+          <h2 className="text-base sm:text-xl font-semibold text-slate-900">
+            Pipeline Overview
+          </h2>
           <p className="mt-1 text-xs sm:text-sm text-slate-500">
             Status breakdown across all {totalCount || 0} active restaurants
           </p>
@@ -274,14 +325,20 @@ export default async function DashboardPage() {
           <MetricPill label="Call Back" value={callBackCount} color="text-indigo-600" />
           <MetricPill label="Agreed" value={agreedCount} color="text-emerald-600" />
           <MetricPill label="Converted" value={convertedCount} color="text-green-600" />
-          <MetricPill label="Not Interested" value={notInterestedCount} color="text-rose-600" />
+          <MetricPill
+            label="Not Interested"
+            value={notInterestedCount}
+            color="text-rose-600"
+          />
         </div>
       </div>
 
       {leaderboard.length > 0 && (
         <div className="rounded-2xl sm:rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
           <div className="mb-3 sm:mb-4">
-            <h2 className="text-base sm:text-xl font-semibold text-slate-900">Team Performance</h2>
+            <h2 className="text-base sm:text-xl font-semibold text-slate-900">
+              Team Performance
+            </h2>
             <p className="mt-1 text-xs sm:text-sm text-slate-500">
               Top performers by closures
             </p>
