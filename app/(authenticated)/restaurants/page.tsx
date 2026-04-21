@@ -1,54 +1,8 @@
-'use client'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
-import { useEffect, useState } from 'react'
-import RestaurantDetailPanel from '@/components/restaurant-detail'
-
-type Restaurant = {
-  id: string
-  restaurant_name: string | null
-  owner_name: string | null
-  phone: string | null
-  city: string | null
-  area: string | null
-  lead_status: string | null
-  assigned_to_name: string | null
-  follow_up_date: string | null
-  follow_up_status: string | null
-  last_follow_up_note: string | null
-  remarks: string | null
-}
-
-type Executive = {
-  id: string
-  full_name: string
-}
-
-type Pagination = {
-  page: number
-  pageSize: number
-  total: number
-  totalPages: number
-}
-
-type Stats = {
-  total: number
-  convertedTillDate: number
-  agreedTillDate: number
-  closuresTillDate: number
-  unassigned: number
-}
-
-const SHEET_STATUSES = [
-  'Agreed',
-  'Converted',
-  'Lead',
-  'Followup',
-  'Call Back',
-  "Couldn't Connect",
-  'Visit',
-  'Not Interested',
-  'Wrong Number',
-]
+import { createClient } from '@supabase/supabase-js'
+import { fetchAllActiveRestaurants, buildCrmMetrics, normalizeStatus } from '@/lib/crm-metrics'
 
 function getStatusClasses(status: string | null) {
   switch ((status || '').toLowerCase()) {
@@ -80,126 +34,29 @@ function formatFollowUpDate(value: string | null) {
   })
 }
 
-export default function RestaurantsPage() {
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([])
-  const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null)
-  const [panelOpen, setPanelOpen] = useState(false)
-  const [executives, setExecutives] = useState<Executive[]>([])
-  const [loading, setLoading] = useState(true)
+export default async function RestaurantsPage() {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
 
-  const [searchInput, setSearchInput] = useState('')
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [followUpFilter, setFollowUpFilter] = useState('')
-  const [page, setPage] = useState(1)
+  const rows = await fetchAllActiveRestaurants(
+    supabase,
+    'id, restaurant_name, owner_name, phone, city, area, lead_status, assigned_to_name, follow_up_date, remarks, updated_at, converted, source_sheet, is_deactivated'
+  )
 
-  const [stats, setStats] = useState<Stats>({
-    total: 0,
-    convertedTillDate: 0,
-    agreedTillDate: 0,
-    closuresTillDate: 0,
-    unassigned: 0,
-  })
+  const metrics = buildCrmMetrics(rows)
 
-  const [pagination, setPagination] = useState<Pagination>({
-    page: 1,
-    pageSize: 100,
-    total: 0,
-    totalPages: 1,
-  })
-
-  async function loadRestaurants(
-    currentPage = page,
-    currentSearch = search,
-    currentStatus = statusFilter,
-    currentFollowUp = followUpFilter
-  ) {
-    try {
-      setLoading(true)
-
-      const params = new URLSearchParams({
-        page: String(currentPage),
-        pageSize: '100',
-      })
-
-      if (currentSearch.trim()) params.set('search', currentSearch.trim())
-      if (currentStatus.trim()) params.set('status', currentStatus.trim())
-      if (currentFollowUp.trim()) params.set('followUp', currentFollowUp.trim())
-
-      const res = await fetch(`/api/restaurants?${params.toString()}`, {
-        cache: 'no-store',
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        console.error('Restaurants API error:', data)
-        setRestaurants([])
-        return
-      }
-
-      setRestaurants(data.data || [])
-      setStats(
-        data.stats || {
-          total: 0,
-          convertedTillDate: 0,
-          agreedTillDate: 0,
-          closuresTillDate: 0,
-          unassigned: 0,
-        }
-      )
-      setPagination(
-        data.pagination || {
-          page: currentPage,
-          pageSize: 100,
-          total: 0,
-          totalPages: 1,
-        }
-      )
-    } catch (error) {
-      console.error('Failed to load restaurants', error)
-      setRestaurants([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function loadExecutives() {
-    try {
-      const res = await fetch('/api/executives', { cache: 'no-store' })
-      const data = await res.json()
-
-      if (!res.ok) {
-        console.error('Executives API error:', data)
-        setExecutives([])
-        return
-      }
-
-      setExecutives(data.executives || [])
-    } catch (error) {
-      console.error('Failed to load executives', error)
-      setExecutives([])
-    }
-  }
-
-  useEffect(() => {
-    loadExecutives()
-  }, [])
-
-  useEffect(() => {
-    loadRestaurants(page, search, statusFilter, followUpFilter)
-  }, [page, search, statusFilter, followUpFilter])
-
-  function handleSearchSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setPage(1)
-    setSearch(searchInput)
-  }
-
-  function openRestaurant(restaurant: Restaurant) {
-    setSelectedRestaurant(restaurant)
-    setPanelOpen(true)
-  }
+  const restaurants = rows
+    .map((row: any) => ({
+      ...row,
+      lead_status: normalizeStatus(row.lead_status, row.converted),
+    }))
+    .sort((a: any, b: any) => {
+      const aa = a.updated_at ? new Date(a.updated_at).getTime() : 0
+      const bb = b.updated_at ? new Date(b.updated_at).getTime() : 0
+      return bb - aa
+    })
 
   return (
     <div className="space-y-5">
@@ -219,7 +76,7 @@ export default function RestaurantsPage() {
               Total Restaurants
             </div>
             <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-slate-900">
-              {stats.total}
+              {metrics.total}
             </div>
           </div>
 
@@ -228,7 +85,7 @@ export default function RestaurantsPage() {
               Total Converted Till Date
             </div>
             <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-emerald-600">
-              {stats.convertedTillDate}
+              {metrics.convertedTillDate}
             </div>
           </div>
 
@@ -237,7 +94,7 @@ export default function RestaurantsPage() {
               Agreed Till Date
             </div>
             <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-teal-600">
-              {stats.agreedTillDate}
+              {metrics.agreedTillDate}
             </div>
           </div>
 
@@ -246,52 +103,8 @@ export default function RestaurantsPage() {
               Unassigned
             </div>
             <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-amber-600">
-              {stats.unassigned}
+              {metrics.unassigned}
             </div>
-          </div>
-        </div>
-
-        <div className="mt-4 sm:mt-6 flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-end">
-          <form onSubmit={handleSearchSubmit} className="w-full xl:max-w-[360px]">
-            <input
-              type="text"
-              placeholder="Search restaurant, owner, city..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-            />
-          </form>
-
-          <div className="flex gap-3">
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setPage(1)
-                setStatusFilter(e.target.value)
-              }}
-              className="h-11 sm:h-12 flex-1 sm:min-w-[180px] rounded-2xl border border-slate-200 bg-slate-50 px-3 sm:px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-            >
-              <option value="">All statuses</option>
-              {SHEET_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={followUpFilter}
-              onChange={(e) => {
-                setPage(1)
-                setFollowUpFilter(e.target.value)
-              }}
-              className="h-11 sm:h-12 flex-1 sm:min-w-[160px] rounded-2xl border border-slate-200 bg-slate-50 px-3 sm:px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-            >
-              <option value="">All follow-ups</option>
-              <option value="today">Due Today</option>
-              <option value="overdue">Overdue</option>
-              <option value="upcoming">Upcoming</option>
-            </select>
           </div>
         </div>
       </div>
@@ -306,20 +119,13 @@ export default function RestaurantsPage() {
           <div className="col-span-2">Phone</div>
         </div>
 
-        {loading ? (
-          <div className="px-6 py-12 text-sm text-slate-500">Loading restaurants...</div>
-        ) : restaurants.length === 0 ? (
+        {restaurants.length === 0 ? (
           <div className="px-6 py-12 text-sm text-slate-500">No restaurants found.</div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {restaurants.map((restaurant) => (
-              <button
-                key={restaurant.id}
-                type="button"
-                onClick={() => openRestaurant(restaurant)}
-                className="w-full text-left transition hover:bg-slate-50 active:bg-slate-100"
-              >
-                <div className="hidden lg:grid grid-cols-14 items-center px-6 py-4">
+            {restaurants.slice(0, 300).map((restaurant: any) => (
+              <div key={restaurant.id} className="w-full text-left">
+                <div className="hidden lg:grid grid-cols-14 items-center px-6 py-4 hover:bg-slate-50 transition">
                   <div className="col-span-4 pr-4">
                     <div className="text-[15px] font-semibold text-slate-900">
                       {restaurant.restaurant_name || '—'}
@@ -378,65 +184,22 @@ export default function RestaurantsPage() {
                   </div>
 
                   <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-slate-500">
-                    {restaurant.assigned_to_name && (
-                      <span className="inline-flex items-center gap-1">
-                        <span className="text-slate-400">●</span>
-                        {restaurant.assigned_to_name}
-                      </span>
-                    )}
-                    {restaurant.phone && (
-                      <span className="inline-flex items-center gap-1">
-                        <span className="text-green-500">☎</span>
-                        {restaurant.phone}
-                      </span>
-                    )}
-                    {restaurant.follow_up_date && (
-                      <span className="inline-flex items-center gap-1">
-                        <span className="text-blue-400">▶</span>
-                        {formatFollowUpDate(restaurant.follow_up_date)}
-                      </span>
-                    )}
+                    {restaurant.assigned_to_name && <span>{restaurant.assigned_to_name}</span>}
+                    {restaurant.phone && <span>{restaurant.phone}</span>}
+                    {restaurant.follow_up_date && <span>{formatFollowUpDate(restaurant.follow_up_date)}</span>}
                   </div>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-200 px-4 sm:px-6 py-3 sm:py-4">
-          <div className="text-xs sm:text-sm text-slate-500">
-            Page {pagination.page} of {pagination.totalPages} · {pagination.total} filtered
+        {restaurants.length > 300 && (
+          <div className="border-t border-slate-200 px-6 py-4 text-sm text-slate-500">
+            Showing first 300 restaurants for speed. We can add server-side filters next.
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={pagination.page <= 1}
-              className="rounded-xl border border-slate-200 px-3 sm:px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Previous
-            </button>
-
-            <button
-              onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
-              disabled={pagination.page >= pagination.totalPages}
-              className="rounded-xl border border-slate-200 px-3 sm:px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        )}
       </div>
-
-      {selectedRestaurant && (
-        <RestaurantDetailPanel
-          open={panelOpen}
-          restaurant={selectedRestaurant}
-          onClose={() => setPanelOpen(false)}
-          executives={executives}
-          onSaved={() => loadRestaurants(page, search, statusFilter, followUpFilter)}
-        />
-      )}
     </div>
   )
 }

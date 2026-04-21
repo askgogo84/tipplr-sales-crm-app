@@ -44,19 +44,17 @@ export default async function ReportsPage() {
 
   return (
     <div className="space-y-5 sm:space-y-6">
-      <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-slate-900">
-            Reports
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {now.toLocaleDateString('en-IN', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })} · Team performance & pipeline health
-          </p>
-        </div>
+      <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
+        <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-slate-900">
+          Reports
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          {now.toLocaleDateString('en-IN', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          })} · Team performance & pipeline health
+        </p>
       </div>
 
       <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
@@ -131,18 +129,6 @@ export default async function ReportsPage() {
           <PipelineRow label="Not Interested" value={metrics.pipeline.notInterested} total={metrics.total} />
           <PipelineRow label="Couldn't Connect" value={metrics.pipeline.couldntConnect} total={metrics.total} />
           <PipelineRow label="Wrong / Incorrect Number" value={metrics.pipeline.wrongNumber} total={metrics.total} />
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-2">
-          <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-medium text-emerald-700">
-            ✓ {metrics.closuresTillDate} Agreed + Converted
-          </span>
-          <span className="rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-xs font-medium text-blue-700">
-            ↻ {metrics.pipeline.lead + metrics.pipeline.followup + metrics.pipeline.callBack + metrics.pipeline.couldntConnect} In Progress
-          </span>
-          <span className="rounded-full bg-rose-50 border border-rose-200 px-3 py-1 text-xs font-medium text-rose-700">
-            ✕ {metrics.pipeline.notInterested} Not Interested
-          </span>
         </div>
       </div>
     </div>
