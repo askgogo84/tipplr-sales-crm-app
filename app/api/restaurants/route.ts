@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
     const allRows = await fetchAllActiveRestaurants(
       supabase,
-      'id, restaurant_name, owner_name, phone, city, area, lead_status, assigned_to_name, follow_up_date, follow_up_status, last_follow_up_note, remarks, updated_at, converted, source_sheet, is_deactivated'
+      'id, restaurant_name, owner_name, phone, city, area, lead_status, assigned_to_name, follow_up_date, remarks, updated_at, converted, source_sheet, is_deactivated'
     )
 
     const stats = buildCrmMetrics(allRows)
