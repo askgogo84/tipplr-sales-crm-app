@@ -1,5 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-
 export type CrmRow = {
   id?: string
   restaurant_name?: string | null
@@ -38,7 +36,7 @@ export function normalizeStatus(
 }
 
 export async function fetchAllActiveRestaurants(
-  supabase: SupabaseClient,
+  supabase: any,
   fields = 'id, restaurant_name, owner_name, phone, city, area, lead_status, assigned_to_name, updated_at, synced_at, follow_up_date, converted, source_sheet, is_deactivated'
 ) {
   const pageSize = 1000
