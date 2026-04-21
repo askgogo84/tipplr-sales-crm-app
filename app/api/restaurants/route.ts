@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -29,13 +30,17 @@ export async function GET(req: NextRequest) {
     const search = (searchParams.get('search') || '').trim()
     const status = (searchParams.get('status') || '').trim()
     const assignedTo = (searchParams.get('assignedTo') || '').trim()
+    const followUp = (searchParams.get('followUp') || '').trim()
 
     const from = (page - 1) * pageSize
     const to = from + pageSize - 1
+    const today = new Date().toISOString().slice(0, 10)
 
     let query = supabase
       .from('restaurants')
       .select('*', { count: 'exact' })
+      .not('source_sheet', 'is', null)
+      .neq('source_sheet', 'Deactivated Outlets')
 
     if (search) {
       query = query.or(
@@ -46,6 +51,7 @@ export async function GET(req: NextRequest) {
           `assigned_to_name.ilike.%${search}%`,
           `city.ilike.%${search}%`,
           `area.ilike.%${search}%`,
+          `source_sheet.ilike.%${search}%`,
         ].join(',')
       )
     }
@@ -58,9 +64,18 @@ export async function GET(req: NextRequest) {
       query = query.eq('assigned_to_name', assignedTo)
     }
 
+    if (followUp === 'today') {
+      query = query.eq('follow_up_date', today)
+    } else if (followUp === 'overdue') {
+      query = query.lt('follow_up_date', today)
+    } else if (followUp === 'upcoming') {
+      query = query.gt('follow_up_date', today)
+    }
+
     query = query
-      .order('source_row_number', { ascending: true, nullsFirst: false })
       .order('updated_at', { ascending: false, nullsFirst: false })
+      .order('source_gid', { ascending: true, nullsFirst: false })
+      .order('source_row_number', { ascending: true, nullsFirst: false })
       .range(from, to)
 
     const { data, error, count } = await query
@@ -153,7 +168,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown server error'
+    const message =
+      error instanceof Error ? error.message : 'Unknown server error'
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

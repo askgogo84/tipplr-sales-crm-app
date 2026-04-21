@@ -29,6 +29,21 @@ type RecentRestaurant = {
   is_deactivated: boolean | null
 }
 
+function normalizeStatus(status: string | null, converted: boolean | null): string {
+  const s = (status || '').trim().toLowerCase()
+
+  if (converted === true) return 'converted'
+  if (['converted', 'already live', 'live'].includes(s)) return 'converted'
+  if (['agreed', 'agreement done'].includes(s)) return 'agreed'
+  if (['followup', 'follow up'].includes(s)) return 'followup'
+  if (['call back', 'callback', 'called back'].includes(s)) return 'call back'
+  if (["couldn't connect", 'couldnt connect', 'not reachable'].includes(s)) return "couldn't connect"
+  if (['not interested', 'not live', 'rejected'].includes(s)) return 'not interested'
+  if (['lead', 'new'].includes(s)) return 'lead'
+  if (['visit', 'visited'].includes(s)) return 'visit'
+  return s || 'lead'
+}
+
 function timeAgo(d: string | null): string {
   if (!d) return '—'
   const now = new Date()
@@ -120,24 +135,17 @@ export default async function DashboardPage() {
   const todayStartIso = todayStart.toISOString()
 
   const [
-    { count: totalCount, error: totalError },
     { data: statusRows, error: statusError },
     { data: recentRestaurants, error: recentError },
   ] = await Promise.all([
     supabase
       .from('restaurants')
-      .select('*', { count: 'exact', head: true })
-      .neq('source_sheet', 'Deactivated Outlets')
-      .not('source_sheet', 'is', null),
-
-    supabase
-      .from('restaurants')
       .select(
         'lead_status, follow_up_date, assigned_to_name, updated_at, converted, source_sheet, is_deactivated'
       )
-      .neq('source_sheet', 'Deactivated Outlets')
       .not('source_sheet', 'is', null)
-      .range(0, 9999),
+      .neq('source_sheet', 'Deactivated Outlets')
+      .range(0, 20000),
 
     supabase
       .from('restaurants')
@@ -145,11 +153,12 @@ export default async function DashboardPage() {
         'id, restaurant_name, owner_name, lead_status, assigned_to_name, updated_at, follow_up_date, source_sheet, is_deactivated'
       )
       .not('source_sheet', 'is', null)
+      .neq('source_sheet', 'Deactivated Outlets')
       .order('updated_at', { ascending: false, nullsFirst: false })
       .limit(10),
   ])
 
-  if (totalError || statusError || recentError) {
+  if (statusError || recentError) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
         Failed to load dashboard data.
@@ -157,13 +166,18 @@ export default async function DashboardPage() {
     )
   }
 
-  const leads = ((statusRows || []) as LeadRow[]).filter(
-    (x) => x.source_sheet !== 'Deactivated Outlets' && x.is_deactivated !== true
-  )
+  const leads = ((statusRows || []) as LeadRow[])
+    .filter((x) => x.source_sheet !== 'Deactivated Outlets' && x.is_deactivated !== true)
+    .map((x) => ({
+      ...x,
+      normalized_status: normalizeStatus(x.lead_status, x.converted),
+    }))
 
   const restaurants = ((recentRestaurants || []) as RecentRestaurant[]).filter(
-    (x) => x.source_sheet !== null
+    (x) => x.source_sheet !== null && x.source_sheet !== 'Deactivated Outlets'
   )
+
+  const totalCount = leads.length
 
   const dueTodayCount = leads.filter((x) => x.follow_up_date === today).length
   const overdueCount = leads.filter(
@@ -172,53 +186,38 @@ export default async function DashboardPage() {
 
   const todaysClosuresCount = leads.filter((x) => {
     if (!x.updated_at) return false
-    const s = (x.lead_status || '').toLowerCase()
-    const isClosed = s === 'agreed' || s === 'converted' || x.converted === true
-    return isClosed && x.updated_at >= todayStartIso
+    return ['agreed', 'converted'].includes(x.normalized_status) && x.updated_at >= todayStartIso
   }).length
 
   const activeStatuses = ['lead', 'followup', 'call back', 'visit', "couldn't connect"]
   const staleCount = leads.filter((x) => {
-    const s = (x.lead_status || '').toLowerCase()
-    if (!activeStatuses.includes(s)) return false
+    if (!activeStatuses.includes(x.normalized_status)) return false
     if (!x.updated_at) return false
     return x.updated_at < sevenDaysAgo
   }).length
 
-  const leadCount = leads.filter(
-    (x) => (x.lead_status || '').toLowerCase() === 'lead'
-  ).length
-  const followupCount = leads.filter(
-    (x) => (x.lead_status || '').toLowerCase() === 'followup'
-  ).length
-  const agreedCount = leads.filter(
-    (x) => (x.lead_status || '').toLowerCase() === 'agreed'
-  ).length
-  const convertedCount = leads.filter(
-    (x) => (x.lead_status || '').toLowerCase() === 'converted'
-  ).length
-  const notInterestedCount = leads.filter(
-    (x) => (x.lead_status || '').toLowerCase() === 'not interested'
-  ).length
-  const callBackCount = leads.filter(
-    (x) => (x.lead_status || '').toLowerCase() === 'call back'
-  ).length
+  const leadCount = leads.filter((x) => x.normalized_status === 'lead').length
+  const followupCount = leads.filter((x) => x.normalized_status === 'followup').length
+  const agreedCount = leads.filter((x) => x.normalized_status === 'agreed').length
+  const convertedCount = leads.filter((x) => x.normalized_status === 'converted').length
+  const notInterestedCount = leads.filter((x) => x.normalized_status === 'not interested').length
+  const callBackCount = leads.filter((x) => x.normalized_status === 'call back').length
 
   const totalClosedOrAgreed = agreedCount + convertedCount
   const conversionRate =
-    (totalCount || 0) > 0
-      ? ((totalClosedOrAgreed / (totalCount || 1)) * 100).toFixed(1)
-      : '0'
+    totalCount > 0 ? ((totalClosedOrAgreed / totalCount) * 100).toFixed(1) : '0'
 
   const repStats = new Map<string, { total: number; closed: number }>()
   leads.forEach((x) => {
     if (!x.assigned_to_name) return
-    const name = x.assigned_to_name
+    const name = x.assigned_to_name.trim()
+    if (!name) return
+
     if (!repStats.has(name)) repStats.set(name, { total: 0, closed: 0 })
     const stats = repStats.get(name)!
     stats.total++
-    const s = (x.lead_status || '').toLowerCase()
-    if (s === 'agreed' || s === 'converted' || x.converted === true) {
+
+    if (['agreed', 'converted'].includes(x.normalized_status)) {
       stats.closed++
     }
   })
@@ -260,7 +259,7 @@ export default async function DashboardPage() {
                 Total Active Restaurants in CRM
               </div>
               <div className="mt-1 text-4xl sm:text-6xl font-bold tracking-tight text-slate-900">
-                {totalCount || 0}
+                {totalCount}
               </div>
               <div className="mt-1 text-xs sm:text-sm text-slate-500">
                 {conversionRate}% overall conversion rate · tap to view all
@@ -281,31 +280,10 @@ export default async function DashboardPage() {
           Today's Focus
         </h2>
         <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4">
-          <FocusCard
-            title="Due Today"
-            value={dueTodayCount}
-            subtitle="Follow-ups"
-            accent="bg-amber-500"
-          />
-          <FocusCard
-            title="Overdue"
-            value={overdueCount}
-            subtitle="Missed follow-ups"
-            accent="bg-rose-500"
-            urgent
-          />
-          <FocusCard
-            title="Closed Today"
-            value={todaysClosuresCount}
-            subtitle="Agreed / Converted"
-            accent="bg-emerald-500"
-          />
-          <FocusCard
-            title="Stale Leads"
-            value={staleCount}
-            subtitle="7+ days idle"
-            accent="bg-orange-500"
-          />
+          <FocusCard title="Due Today" value={dueTodayCount} subtitle="Follow-ups" accent="bg-amber-500" />
+          <FocusCard title="Overdue" value={overdueCount} subtitle="Missed follow-ups" accent="bg-rose-500" urgent />
+          <FocusCard title="Closed Today" value={todaysClosuresCount} subtitle="Agreed / Converted" accent="bg-emerald-500" />
+          <FocusCard title="Stale Leads" value={staleCount} subtitle="7+ days idle" accent="bg-orange-500" />
         </div>
       </div>
 
@@ -315,7 +293,7 @@ export default async function DashboardPage() {
             Pipeline Overview
           </h2>
           <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            Status breakdown across all {totalCount || 0} active restaurants
+            Status breakdown across all {totalCount} active restaurants
           </p>
         </div>
 
@@ -325,11 +303,7 @@ export default async function DashboardPage() {
           <MetricPill label="Call Back" value={callBackCount} color="text-indigo-600" />
           <MetricPill label="Agreed" value={agreedCount} color="text-emerald-600" />
           <MetricPill label="Converted" value={convertedCount} color="text-green-600" />
-          <MetricPill
-            label="Not Interested"
-            value={notInterestedCount}
-            color="text-rose-600"
-          />
+          <MetricPill label="Not Interested" value={notInterestedCount} color="text-rose-600" />
         </div>
       </div>
 
