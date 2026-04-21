@@ -134,6 +134,16 @@ export default async function DashboardPage() {
 
   const now = new Date()
 
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const todayStartIso = todayStart.toISOString()
+
+  const { count: closedTodayCount } = await supabase
+    .from('restaurant_activity_log')
+    .select('*', { count: 'exact', head: true })
+    .gte('changed_at', todayStartIso)
+    .in('new_status', ['Agreed', 'Converted'])
+
   return (
     <div className="space-y-5 sm:space-y-6">
       <div className="flex flex-col gap-3 rounded-2xl sm:rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm lg:flex-row lg:items-center lg:justify-between">
@@ -160,13 +170,13 @@ export default async function DashboardPage() {
           accent="bg-slate-800"
           href="/restaurants"
         />
-       <BigMetricCard
-  title="Converted Till Date"
-  value={metrics.convertedTillDate}
-  subtitle="Final List · ONDC Priority Sheet · Tipplr - Waayu · Priority List · Magic Pindata · Deactivated Outlets"
-  accent="bg-emerald-500"
-  href="/restaurants?status=Converted"
-/>
+        <BigMetricCard
+          title="Converted Till Date"
+          value={metrics.convertedTillDate}
+          subtitle="Final List · ONDC Priority Sheet · Tipplr - Waayu · Priority List · Magicpin Data"
+          accent="bg-emerald-500"
+          href="/restaurants?status=Converted"
+        />
         <BigMetricCard
           title="Agreed Till Date"
           value={metrics.agreedTillDate}
@@ -188,10 +198,31 @@ export default async function DashboardPage() {
           Today's Focus
         </h2>
         <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4">
-          <FocusCard title="Due Today" value={metrics.dueToday} subtitle="Follow-ups" accent="bg-amber-500" />
-          <FocusCard title="Overdue" value={metrics.overdue} subtitle="Missed follow-ups" accent="bg-rose-500" urgent />
-          <FocusCard title="Stale Leads" value={metrics.stale} subtitle="7+ days idle" accent="bg-orange-500" />
-          <FocusCard title="Agreed + Converted" value={metrics.closuresTillDate} subtitle="Total closures till date" accent="bg-emerald-500" />
+          <FocusCard
+            title="Due Today"
+            value={metrics.dueToday}
+            subtitle="Follow-ups"
+            accent="bg-amber-500"
+          />
+          <FocusCard
+            title="Overdue"
+            value={metrics.overdue}
+            subtitle="Missed follow-ups"
+            accent="bg-rose-500"
+            urgent
+          />
+          <FocusCard
+            title="Stale Leads"
+            value={metrics.stale}
+            subtitle="7+ days idle"
+            accent="bg-orange-500"
+          />
+          <FocusCard
+            title="Agreed + Converted Today"
+            value={closedTodayCount || 0}
+            subtitle="Real closures logged today"
+            accent="bg-emerald-500"
+          />
         </div>
       </div>
 
@@ -363,4 +394,3 @@ export default async function DashboardPage() {
     </div>
   )
 }
-
