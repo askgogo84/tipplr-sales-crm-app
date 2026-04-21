@@ -160,13 +160,13 @@ export default async function DashboardPage() {
           accent="bg-slate-800"
           href="/restaurants"
         />
-        <BigMetricCard
-          title="Converted Till Date"
-          value={metrics.convertedTillDate}
-          subtitle="Across all synced tabs"
-          accent="bg-emerald-500"
-          href="/restaurants?status=Converted"
-        />
+       <BigMetricCard
+  title="Converted Till Date"
+  value={metrics.convertedTillDate}
+  subtitle="Final List · ONDC Priority Sheet · Tipplr - Waayu · Priority List · Magic Pindata · Deactivated Outlets"
+  accent="bg-emerald-500"
+  href="/restaurants?status=Converted"
+/>
         <BigMetricCard
           title="Agreed Till Date"
           value={metrics.agreedTillDate}

@@ -43,7 +43,7 @@ const tabs = [
     ),
   },
   {
-    label: 'Pipeline',
+    label: 'Leads',
     href: '/pipeline',
     icon: (active: boolean) => (
       <svg
@@ -62,8 +62,8 @@ const tabs = [
     ),
   },
   {
-    label: 'Activity',
-    href: '/activity',
+    label: 'Reports',
+    href: '/reports',
     icon: (active: boolean) => (
       <svg
         className="w-5 h-5"
