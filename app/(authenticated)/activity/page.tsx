@@ -1,5 +1,1 @@
-import { redirect } from 'next/navigation'
-
-export default function ActivityRedirectPage() {
-  redirect('/reports')
-}
+export { default, dynamic, revalidate } from "../reports/page"
