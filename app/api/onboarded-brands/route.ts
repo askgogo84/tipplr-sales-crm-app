@@ -1,4 +1,4 @@
-export const dynamic = "force-dynamic"
+ï»¿export const dynamic = "force-dynamic"
 
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
@@ -33,7 +33,10 @@ export async function GET() {
       .order("changed_at", { ascending: false })
 
     if (yesterdayError) {
-      return NextResponse.json({ success: false, error: yesterdayError.message }, { status: 500 })
+      return NextResponse.json(
+        { success: false, error: yesterdayError.message },
+        { status: 500 }
+      )
     }
 
     const { data: convertedRows, error: convertedError } = await supabase
@@ -45,7 +48,10 @@ export async function GET() {
       .order("restaurant_name", { ascending: true })
 
     if (convertedError) {
-      return NextResponse.json({ success: false, error: convertedError.message }, { status: 500 })
+      return NextResponse.json(
+        { success: false, error: convertedError.message },
+        { status: 500 }
+      )
     }
 
     const yesterdayMap = new Map<string, any>()
@@ -56,8 +62,8 @@ export async function GET() {
         yesterdayMap.set(brand, {
           brand_name: brand,
           converted_at: row.changed_at,
-          changed_by: row.changed_by || "—",
-          source_sheet: row.source_sheet || "—",
+          changed_by: row.changed_by || "-",
+          source_sheet: row.source_sheet || "-",
         })
       }
     }
@@ -69,8 +75,8 @@ export async function GET() {
       if (!allMap.has(brand)) {
         allMap.set(brand, {
           brand_name: brand,
-          source_sheet: row.source_sheet || "—",
-          assigned_to_name: row.assigned_to_name || "—",
+          source_sheet: row.source_sheet || "-",
+          assigned_to_name: row.assigned_to_name || "-",
           updated_at: row.updated_at || null,
         })
       }
@@ -85,6 +91,9 @@ export async function GET() {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error"
-    return NextResponse.json({ success: false, error: message, rows: [] }, { status: 500 })
+    return NextResponse.json(
+      { success: false, error: message, rows: [] },
+      { status: 500 }
+    )
   }
 }

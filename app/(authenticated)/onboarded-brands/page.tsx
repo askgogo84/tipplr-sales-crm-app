@@ -1,4 +1,4 @@
-"use client"
+ï»¿"use client"
 
 import { useEffect, useMemo, useState } from "react"
 
@@ -12,7 +12,7 @@ type BrandRow = {
 }
 
 function formatDate(value?: string | null) {
-  if (!value) return "—"
+  if (!value) return "-"
   return new Date(value).toLocaleString("en-IN", {
     day: "numeric",
     month: "short",
@@ -123,8 +123,8 @@ export default function OnboardedBrandsPage() {
               >
                 <div className="font-medium text-slate-900">{brand.brand_name}</div>
                 <div>{formatDate(brand.converted_at)}</div>
-                <div>{brand.changed_by || "—"}</div>
-                <div>{brand.source_sheet || "—"}</div>
+                <div>{brand.changed_by || "-"}</div>
+                <div>{brand.source_sheet || "-"}</div>
               </div>
             ))}
           </div>
@@ -171,8 +171,8 @@ export default function OnboardedBrandsPage() {
                 className="grid grid-cols-4 border-t border-slate-100 px-4 py-3 text-sm text-slate-700"
               >
                 <div className="font-medium text-slate-900">{brand.brand_name}</div>
-                <div>{brand.assigned_to_name || "—"}</div>
-                <div>{brand.source_sheet || "—"}</div>
+                <div>{brand.assigned_to_name || "-"}</div>
+                <div>{brand.source_sheet || "-"}</div>
                 <div>{formatDate(brand.updated_at)}</div>
               </div>
             ))}
