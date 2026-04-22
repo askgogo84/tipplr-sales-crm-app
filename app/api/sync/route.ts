@@ -170,7 +170,7 @@ function parseRowBySheet(
 
     remarks = remarksParts.length ? remarksParts.join(' | ') : null
   } else if (sheetTitle === 'ONDC Priority Sheet') {
-    restaurant_name = firstNonEmpty(record, ['restaurant name'])
+    restaurant_name = firstNonEmpty(record, ['brand name', 'restaurant name'])
     owner_name = firstNonEmpty(record, ['contact person'])
     phone = firstNonEmpty(record, ['contact no'])
     priority = firstNonEmpty(record, ['priority'])
@@ -179,25 +179,25 @@ function parseRowBySheet(
     remarks = firstNonEmpty(record, ['remarks'])
     reason = firstNonEmpty(record, ['reason'])
   } else if (sheetTitle === 'Tipplr - Waayu ') {
-    restaurant_name = firstNonEmpty(record, ['restaurant names'])
+    restaurant_name = firstNonEmpty(record, ['brand name', 'restaurant names'])
     owner_name = firstNonEmpty(record, ['contact person', 'poc name'])
     phone = firstNonEmpty(record, ['contact number', 'phone number'])
-    priority = firstNonEmpty(record, ['priority'])
+    priority = firstNonEmpty(record, ['priority as per ondc', 'priority'])
     assigned_to_name = firstNonEmpty(record, ['called by'])
     lead_status = firstNonEmpty(record, ['pushback/status', 'status']) || 'Lead'
     remarks = firstNonEmpty(record, ['remarks'])
     reason = firstNonEmpty(record, ['pushback/status', 'reason'])
   } else if (sheetTitle === 'Priority List') {
-    restaurant_name = firstNonEmpty(record, ['outlet name'])
+    restaurant_name = firstNonEmpty(record, ['brand name', 'outlet name'])
     owner_name = firstNonEmpty(record, ['poc name'])
     phone = firstNonEmpty(record, ['poc contact'])
-    priority = firstNonEmpty(record, ['priority'])
+    priority = firstNonEmpty(record, ['priority', 'priority classification (market share)'])
     assigned_to_name = firstNonEmpty(record, ['called by'])
     lead_status = firstNonEmpty(record, ['status']) || 'Lead'
     remarks = firstNonEmpty(record, ['remarks'])
-    reason = firstNonEmpty(record, ['reason'])
+    reason = firstNonEmpty(record, ['reason', 'sunil comments'])
   } else if (sheetTitle === 'Magic Pindata') {
-    restaurant_name = firstNonEmpty(record, ['restaurant name'])
+    restaurant_name = firstNonEmpty(record, ['brand name', 'restaurant name'])
     owner_name = firstNonEmpty(record, ['contact person', 'poc name'])
     phone = firstNonEmpty(record, ['phone number', 'contact number'])
     priority = firstNonEmpty(record, ['priority'])
@@ -205,14 +205,16 @@ function parseRowBySheet(
     lead_status = firstNonEmpty(record, ['status']) || 'Lead'
     remarks = firstNonEmpty(record, ['remarks'])
     reason = firstNonEmpty(record, ['reason'])
+    city = firstNonEmpty(record, ['city']) || 'Bengaluru'
   } else if (sheetTitle === 'Deactivated Outlets') {
-    restaurant_name = firstNonEmpty(record, ['name'])
+    restaurant_name = firstNonEmpty(record, ['brand name', 'name'])
     owner_name = firstNonEmpty(record, ['contact person', 'poc name'])
     phone = firstNonEmpty(record, ['phone number', 'contact number'])
     assigned_to_name = firstNonEmpty(record, ['called by'])
     lead_status = firstNonEmpty(record, ['status']) || 'Deactivated'
-    remarks = firstNonEmpty(record, ['remarks'])
+    remarks = firstNonEmpty(record, ['remark', 'remarks', 'comments'])
     reason = firstNonEmpty(record, ['reason'])
+    city = firstNonEmpty(record, ['city name']) || 'Bengaluru'
   }
 
   if (!restaurant_name) return null
