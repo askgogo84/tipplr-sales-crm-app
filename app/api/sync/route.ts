@@ -57,6 +57,24 @@ function normalizeHeader(header: string): string {
     .replace(/\s+/g, ' ')
 }
 
+function normalizeStatus(status: string | null | undefined, converted?: boolean | null): string {
+  const s = (status || '').trim().toLowerCase()
+
+  if (converted === true) return 'Converted'
+  if (['converted', 'already live', 'live'].includes(s)) return 'Converted'
+  if (['agreed', 'agreement done'].includes(s)) return 'Agreed'
+  if (['followup', 'follow up'].includes(s)) return 'Followup'
+  if (['call back', 'callback', 'called back'].includes(s)) return 'Call Back'
+  if (["couldn't connect", 'couldnt connect', 'not reachable'].includes(s)) return "Couldn't Connect"
+  if (['not interested', 'not live', 'rejected'].includes(s)) return 'Not Interested'
+  if (['wrong number', 'incorrect number', 'invalid number'].includes(s)) return 'Wrong Number'
+  if (['lead', 'new'].includes(s)) return 'Lead'
+  if (['visit', 'visited'].includes(s)) return 'Visit'
+  if (['deactivated'].includes(s)) return 'Deactivated'
+
+  return status || 'Lead'
+}
+
 function getGoogleCredentials() {
   const envJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
 
@@ -378,9 +396,39 @@ export async function GET() {
     const batchErrors: Array<{ batch: number; error: string }> = []
 
     for (let i = 0; i < chunks.length; i++) {
+      const batch = chunks[i]
+
+      const sourceGids = Array.from(
+        new Set(batch.map((row: any) => row.source_gid).filter((v) => v !== null && v !== undefined))
+      )
+
+      const sourceRowNumbers = Array.from(
+        new Set(batch.map((row: any) => row.source_row_number).filter((v) => v !== null && v !== undefined))
+      )
+
+      let existingRows: any[] = []
+
+      if (sourceGids.length > 0 && sourceRowNumbers.length > 0) {
+        const { data, error: existingRowsError } = await supabase
+          .from('restaurants')
+          .select('id, restaurant_name, lead_status, converted, assigned_to_name, source_sheet, source_gid, source_row_number')
+          .in('source_gid', sourceGids)
+          .in('source_row_number', sourceRowNumbers)
+
+        if (existingRowsError) {
+          console.error('Failed to fetch existing rows for activity comparison', existingRowsError)
+        } else {
+          existingRows = data || []
+        }
+      }
+
+      const existingMap = new Map(
+        existingRows.map((row: any) => [`${row.source_gid}-${row.source_row_number}`, row])
+      )
+
       const { error } = await supabase
         .from('restaurants')
-        .upsert(chunks[i], {
+        .upsert(batch, {
           onConflict: 'source_gid,source_row_number',
           ignoreDuplicates: false,
         })
@@ -390,6 +438,39 @@ export async function GET() {
           batch: i + 1,
           error: error.message,
         })
+        continue
+      }
+
+      const activityRows: any[] = []
+
+      for (const row of batch) {
+        const existing = existingMap.get(`${row.source_gid}-${row.source_row_number}`)
+
+        const oldStatus = normalizeStatus(existing?.lead_status, existing?.converted)
+        const newStatus = normalizeStatus(row.lead_status, row.converted)
+
+        if (oldStatus !== 'Converted' && newStatus === 'Converted') {
+          activityRows.push({
+            restaurant_id: existing?.id || null,
+            restaurant_name: row.restaurant_name,
+            source_sheet: row.source_sheet || existing?.source_sheet || null,
+            old_status: oldStatus,
+            new_status: 'Converted',
+            changed_by: row.assigned_to_name || existing?.assigned_to_name || 'Sheet Sync',
+            changed_at: new Date().toISOString(),
+            note: 'Detected during sheet sync',
+          })
+        }
+      }
+
+      if (activityRows.length > 0) {
+        const { error: activityInsertError } = await supabase
+          .from('restaurant_activity_log')
+          .insert(activityRows)
+
+        if (activityInsertError) {
+          console.error('Failed to insert activity log rows', activityInsertError)
+        }
       }
     }
 
