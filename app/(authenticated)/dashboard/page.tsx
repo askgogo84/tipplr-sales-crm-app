@@ -142,15 +142,17 @@ export default async function DashboardPage() {
 
   const now = new Date()
 
-  const formattedLastSync = latestSyncRow?.synced_at
-    ? new Date(latestSyncRow.synced_at).toLocaleString('en-IN', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      })
-    : 'Not synced yet'
+ const formattedLastSync = latestSyncRow?.synced_at
+  ? new Date(latestSyncRow.synced_at).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    })
+  : 'Not synced yet'
 
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
