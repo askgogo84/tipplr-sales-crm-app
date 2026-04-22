@@ -22,6 +22,12 @@ function normalizeBoolean(value: unknown): boolean | null {
   return null
 }
 
+function canonicalStatus(status: string | null | undefined, converted?: boolean | null) {
+  return String(normalizeStatus(status || null, converted) || '')
+    .trim()
+    .toLowerCase()
+}
+
 async function fetchAllRestaurantsInBatches() {
   const batchSize = 1000
   let from = 0
@@ -87,10 +93,22 @@ export async function GET(req: NextRequest) {
 
     const allRows = (rows || [])
       .filter((row: any) => row.source_sheet !== 'Deactivated Outlets')
-      .map((row: any) => ({
-        ...row,
-        lead_status: normalizeStatus(row.lead_status, row.converted),
-      }))
+      .map((row: any) => {
+        const normalizedLeadStatus = normalizeStatus(row.lead_status, row.converted)
+        return {
+          ...row,
+          lead_status: normalizedLeadStatus,
+          _statusKey: canonicalStatus(row.lead_status, row.converted),
+        }
+      })
+
+    const sourceSheets = Array.from(
+      new Set(
+        allRows
+          .map((row: any) => row.source_sheet)
+          .filter(Boolean)
+      )
+    ).sort()
 
     let filtered = [...allRows]
 
@@ -111,7 +129,8 @@ export async function GET(req: NextRequest) {
     }
 
     if (status) {
-      filtered = filtered.filter((row: any) => row.lead_status === status)
+      const selectedStatusKey = status.trim().toLowerCase()
+      filtered = filtered.filter((row: any) => row._statusKey === selectedStatusKey)
     }
 
     if (assignedTo) {
@@ -130,36 +149,27 @@ export async function GET(req: NextRequest) {
       filtered = filtered.filter((row: any) => row.follow_up_date && row.follow_up_date > today)
     }
 
+    const statsBase = filtered
+
+    const stats = {
+      total: statsBase.length,
+      convertedTillDate: statsBase.filter((row: any) => row._statusKey === 'converted').length,
+      agreedTillDate: statsBase.filter((row: any) => row._statusKey === 'agreed').length,
+      closuresTillDate: statsBase.filter((row: any) =>
+        ['agreed', 'converted'].includes(row._statusKey)
+      ).length,
+      unassigned: statsBase.filter((row: any) => !row.assigned_to_name).length,
+    }
+
     const total = filtered.length
     const from = (page - 1) * pageSize
     const to = from + pageSize
-    const paged = filtered.slice(from, to)
-
-    const sourceSheets = Array.from(
-      new Set(
-        allRows
-          .map((row: any) => row.source_sheet)
-          .filter(Boolean)
-      )
-    ).sort()
-
-    const convertedTillDate = allRows.filter((row: any) => row.lead_status === 'Converted').length
-    const agreedTillDate = allRows.filter((row: any) => row.lead_status === 'Agreed').length
-    const closuresTillDate = allRows.filter((row: any) =>
-      ['Agreed', 'Converted'].includes(row.lead_status)
-    ).length
-    const unassigned = allRows.filter((row: any) => !row.assigned_to_name).length
+    const paged = filtered.slice(from, to).map(({ _statusKey, ...row }: any) => row)
 
     return NextResponse.json({
       success: true,
       data: paged,
-      stats: {
-        total: allRows.length,
-        convertedTillDate,
-        agreedTillDate,
-        closuresTillDate,
-        unassigned,
-      },
+      stats,
       filters: {
         sourceSheets,
       },
