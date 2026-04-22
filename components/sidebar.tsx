@@ -1,7 +1,8 @@
-"use client"
+﻿"use client"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useEffect, useState } from "react"
 import LogoutButton from "@/components/logout-button"
 
 const navItems = [
@@ -17,6 +18,11 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
+
+  useEffect(() => {
+    setPendingHref(null)
+  }, [pathname])
 
   const mainItems = navItems.filter((item) => item.section === "Main")
   const manageItems = navItems.filter((item) => item.section === "Manage")
@@ -24,18 +30,30 @@ export default function Sidebar() {
   function renderItems(items: typeof navItems) {
     return items.map((item) => {
       const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+      const isPending = pendingHref === item.href && !isActive
 
       return (
         <Link
           key={item.href}
           href={item.href}
-          className={`block rounded-xl px-4 py-3 text-sm font-medium transition ${
+          prefetch={true}
+          onClick={() => {
+            if (!isActive) setPendingHref(item.href)
+          }}
+          className={`flex items-center justify-between rounded-xl px-4 py-3 text-sm font-medium transition ${
             isActive
               ? "bg-white/10 text-white"
               : "text-slate-300 hover:bg-white/5 hover:text-white"
           }`}
         >
-          {item.label}
+          <span>{item.label}</span>
+
+          {isPending && (
+            <span className="inline-flex items-center gap-2 text-[11px] text-slate-300">
+              <span className="h-2 w-2 rounded-full bg-slate-300 animate-pulse" />
+              Loading
+            </span>
+          )}
         </Link>
       )
     })
