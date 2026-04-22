@@ -2,11 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import {
-  fetchAllActiveRestaurants,
-  buildCrmMetrics,
-  normalizeStatus,
-} from '@/lib/crm-metrics'
+import { normalizeStatus } from '@/lib/crm-metrics'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -40,17 +36,48 @@ export async function GET(req: NextRequest) {
 
     const today = new Date().toISOString().slice(0, 10)
 
-    const allRows = await fetchAllActiveRestaurants(
-      supabase,
-      'id, restaurant_name, owner_name, phone, city, area, lead_status, assigned_to_name, follow_up_date, follow_up_status, last_follow_up_note, remarks, updated_at, converted, source_sheet, is_deactivated, priority, documents_received, reason, go_live_date'
-    )
+    const { data: rows, error } = await supabase
+      .from('restaurants')
+      .select(`
+        id,
+        restaurant_name,
+        owner_name,
+        phone,
+        city,
+        area,
+        lead_status,
+        assigned_to_name,
+        follow_up_date,
+        follow_up_status,
+        last_follow_up_note,
+        remarks,
+        updated_at,
+        converted,
+        source_sheet,
+        is_deactivated,
+        priority,
+        documents_received,
+        reason,
+        go_live_date
+      `)
+      .order('updated_at', { ascending: false, nullsFirst: false })
 
-    const stats = buildCrmMetrics(allRows)
+    if (error) {
+      return NextResponse.json(
+        { success: false, error: error.message, data: [] },
+        { status: 500 }
+      )
+    }
 
-    let filtered = allRows.map((row: any) => ({
-      ...row,
-      lead_status: normalizeStatus(row.lead_status, row.converted),
-    }))
+    const allRows =
+      (rows || [])
+        .filter((row: any) => row.source_sheet !== 'Deactivated Outlets')
+        .map((row: any) => ({
+          ...row,
+          lead_status: normalizeStatus(row.lead_status, row.converted),
+        }))
+
+    let filtered = [...allRows]
 
     if (search) {
       filtered = filtered.filter((row: any) =>
@@ -88,12 +115,6 @@ export async function GET(req: NextRequest) {
       filtered = filtered.filter((row: any) => row.follow_up_date && row.follow_up_date > today)
     }
 
-    filtered.sort((a: any, b: any) => {
-      const aa = a.updated_at ? new Date(a.updated_at).getTime() : 0
-      const bb = b.updated_at ? new Date(b.updated_at).getTime() : 0
-      return bb - aa
-    })
-
     const total = filtered.length
     const from = (page - 1) * pageSize
     const to = from + pageSize
@@ -107,15 +128,22 @@ export async function GET(req: NextRequest) {
       )
     ).sort()
 
+    const convertedTillDate = allRows.filter((row: any) => row.lead_status === 'Converted').length
+    const agreedTillDate = allRows.filter((row: any) => row.lead_status === 'Agreed').length
+    const closuresTillDate = allRows.filter((row: any) =>
+      ['Agreed', 'Converted'].includes(row.lead_status)
+    ).length
+    const unassigned = allRows.filter((row: any) => !row.assigned_to_name).length
+
     return NextResponse.json({
       success: true,
       data: paged,
       stats: {
-        total: stats.total,
-        convertedTillDate: stats.convertedTillDate,
-        agreedTillDate: stats.agreedTillDate,
-        closuresTillDate: stats.closuresTillDate,
-        unassigned: stats.unassigned,
+        total: allRows.length,
+        convertedTillDate,
+        agreedTillDate,
+        closuresTillDate,
+        unassigned,
       },
       filters: {
         sourceSheets,
@@ -128,8 +156,7 @@ export async function GET(req: NextRequest) {
       },
     })
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Unknown server error'
+    const message = error instanceof Error ? error.message : 'Unknown server error'
 
     return NextResponse.json(
       { success: false, error: message, data: [] },
