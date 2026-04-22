@@ -123,6 +123,14 @@ export default async function DashboardPage() {
   const rows = await fetchAllActiveRestaurants(supabase)
   const metrics = buildCrmMetrics(rows)
 
+  const { data: latestSyncRow } = await supabase
+    .from('restaurants')
+    .select('synced_at')
+    .not('synced_at', 'is', null)
+    .order('synced_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
   const recentRestaurants = rows
     .slice()
     .sort((a, b) => {
@@ -133,6 +141,16 @@ export default async function DashboardPage() {
     .slice(0, 10)
 
   const now = new Date()
+
+  const formattedLastSync = latestSyncRow?.synced_at
+    ? new Date(latestSyncRow.synced_at).toLocaleString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : 'Not synced yet'
 
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
@@ -151,13 +169,18 @@ export default async function DashboardPage() {
           <h1 className="text-xl sm:text-3xl lg:text-4xl font-semibold tracking-tight text-slate-900">
             Dashboard
           </h1>
-          <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            {now.toLocaleDateString('en-IN', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long',
-            })}
-          </p>
+          <div className="mt-1 space-y-1">
+            <p className="text-xs sm:text-sm text-slate-500">
+              {now.toLocaleDateString('en-IN', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+              })}
+            </p>
+            <p className="text-[11px] sm:text-xs text-slate-400">
+              Last synced: {formattedLastSync}
+            </p>
+          </div>
         </div>
         <SyncButton />
       </div>
