@@ -7,6 +7,7 @@ import LogoutButton from "@/components/logout-button"
 const navItems = [
   { label: "Dashboard", href: "/dashboard", section: "Main" },
   { label: "Restaurants", href: "/restaurants", section: "Main" },
+  { label: "Onboarded Brands", href: "/onboarded-brands", section: "Main" },
   { label: "Leads", href: "/pipeline", section: "Main" },
   { label: "Bulk Assign", href: "/bulk-assign", section: "Main" },
   { label: "Team", href: "/team", section: "Manage" },
