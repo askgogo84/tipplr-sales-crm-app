@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 type Restaurant = Record<string, any> & {
   id: string
@@ -10,6 +10,33 @@ type Executive = {
   id: string
   full_name: string
 }
+
+type FormState = {
+  lead_status: string
+  assigned_to_name: string
+  follow_up_date: string
+  priority: string
+  remarks: string
+  converted: boolean
+  documents_received: boolean
+  reason: string
+  go_live_date: string
+}
+
+const STATUS_OPTIONS = [
+  'Lead',
+  'Agreed',
+  'Followup',
+  'Call Back',
+  "Couldn't Connect",
+  'Visit',
+  'Not Interested',
+  'Wrong Number',
+  'Invalid Number',
+  'Permanently Closed',
+  'Temporarily Closed',
+  'Converted',
+]
 
 export default function RestaurantDetailPanel({
   open,
@@ -25,225 +52,399 @@ export default function RestaurantDetailPanel({
   onSaved: () => void
 }) {
   const [loading, setLoading] = useState(false)
-  const r = restaurant
+  const [savedMessage, setSavedMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
+
+  const initialState: FormState = useMemo(
+    () => ({
+      lead_status: restaurant.lead_status || '',
+      assigned_to_name: restaurant.assigned_to_name || '',
+      follow_up_date: restaurant.follow_up_date || '',
+      priority: restaurant.priority || '',
+      remarks: restaurant.remarks || '',
+      converted: Boolean(restaurant.converted),
+      documents_received: Boolean(restaurant.documents_received),
+      reason: restaurant.reason || '',
+      go_live_date: restaurant.go_live_date || '',
+    }),
+    [restaurant]
+  )
+
+  const [form, setForm] = useState<FormState>(initialState)
+
+  useEffect(() => {
+    setForm(initialState)
+    setSavedMessage('')
+    setErrorMessage('')
+  }, [initialState])
 
   if (!open) return null
 
-  async function updateField(updates: Record<string, any>) {
+  function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }))
+    setSavedMessage('')
+    setErrorMessage('')
+  }
+
+  const isDirty = JSON.stringify(form) !== JSON.stringify(initialState)
+
+  async function handleSave() {
     setLoading(true)
+    setSavedMessage('')
+    setErrorMessage('')
+
     try {
-      await fetch('/api/restaurants/update', {
+      const res = await fetch('/api/restaurants/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: r.id, ...updates }),
+        body: JSON.stringify({
+          id: restaurant.id,
+          lead_status: form.lead_status || null,
+          assigned_to_name: form.assigned_to_name || null,
+          follow_up_date: form.follow_up_date || null,
+          priority: form.priority || null,
+          remarks: form.remarks || null,
+          converted: form.converted,
+          documents_received: form.documents_received,
+          reason: form.reason || null,
+          go_live_date: form.go_live_date || null,
+        }),
       })
+
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to save changes')
+      }
+
+      setSavedMessage('Updated successfully')
       onSaved()
-    } catch (e) {
-      console.error('Update failed', e)
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to save changes')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
+
+  function handleReset() {
+    setForm(initialState)
+    setSavedMessage('')
+    setErrorMessage('')
+  }
+
+  const whatsappHref = restaurant.phone
+    ? `https://wa.me/91${String(restaurant.phone).replace(/\D/g, '')}`
+    : null
+
+  const callHref = restaurant.phone ? `tel:${restaurant.phone}` : null
 
   return (
     <>
       <div
         onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-          zIndex: 500, backdropFilter: 'blur(4px)',
-        }}
+        className="fixed inset-0 z-[500] bg-black/40 backdrop-blur-[2px]"
       />
 
-      <div style={{
-        position: 'fixed', top: 0, right: 0,
-        width: 520, maxWidth: '95vw', height: '100vh',
-        background: '#fff', zIndex: 501,
-        boxShadow: '0 20px 60px rgba(0,0,0,0.14)',
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      }}>
-        {/* Header */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '20px 24px', borderBottom: '1px solid #E8E4DE', flexShrink: 0,
-        }}>
-          <div>
-            <div style={{ fontSize: 20, fontWeight: 600, color: '#1A1814' }}>
-              {r.restaurant_name || 'Restaurant'}
+      <div className="fixed right-0 top-0 z-[501] flex h-screen w-[560px] max-w-[96vw] flex-col overflow-hidden bg-white shadow-[0_20px_60px_rgba(0,0,0,0.14)]">
+        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
+          <div className="min-w-0">
+            <div className="truncate text-xl font-semibold text-slate-900">
+              {restaurant.restaurant_name || 'Restaurant'}
             </div>
-            {r.owner_name && (
-              <div style={{ fontSize: 13, color: '#6B6560', marginTop: 4 }}>
-                {r.owner_name} {r.city ? `· ${r.city}` : ''}
-              </div>
-            )}
+            <div className="mt-1 text-sm text-slate-500">
+              {restaurant.owner_name || 'No owner'}
+              {restaurant.city ? ` • ${restaurant.city}` : ''}
+              {restaurant.source_sheet ? ` • ${restaurant.source_sheet}` : ''}
+            </div>
           </div>
-          <button onClick={onClose} style={{
-            width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 8, border: 'none', background: 'none', cursor: 'pointer',
-            fontSize: 18, color: '#6B6560',
-          }}>✕</button>
+
+          <button
+            onClick={onClose}
+            className="ml-4 rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+          >
+            Close
+          </button>
         </div>
 
-        {/* Body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
-          {/* Status */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Status</label>
-            <select
-              defaultValue={r.lead_status || ''}
-              onChange={e => updateField({ lead_status: e.target.value })}
-              style={selectStyle}
-            >
-              <option value="">Select status</option>
-              {['Agreed','Not Interested','Visit','Incorrect Number','Followup',
-                "Couldn't Connect",'Call Back','Wrong Number','Invalid Number',
-                'Permanently Closed','Temporarily Closed','Converted'].map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
+        <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+          <div className="grid gap-4">
+            <SectionCard title="Lead Status">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Status">
+                  <select
+                    value={form.lead_status}
+                    onChange={(e) => setField('lead_status', e.target.value)}
+                    className={inputClassName}
+                  >
+                    <option value="">Select status</option>
+                    {STATUS_OPTIONS.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
 
-          {/* Assigned To */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Assigned To</label>
-            <select
-              defaultValue={r.assigned_to_name || ''}
-              onChange={e => updateField({ assigned_to_name: e.target.value })}
-              style={selectStyle}
-            >
-              <option value="">Unassigned</option>
-              {executives.map(ex => (
-                <option key={ex.id} value={ex.full_name}>{ex.full_name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Phone */}
-          {r.phone && (
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Phone</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <a href={`https://wa.me/91${r.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
-                  style={{
-                    flex: 1, padding: '10px 14px', borderRadius: 8, textAlign: 'center',
-                    background: '#D1FAE5', color: '#065F46', textDecoration: 'none',
-                    fontSize: 13, fontWeight: 600,
-                  }}>📱 WhatsApp</a>
-                <a href={`tel:${r.phone}`}
-                  style={{
-                    flex: 1, padding: '10px 14px', borderRadius: 8, textAlign: 'center',
-                    background: '#DBEAFE', color: '#1E40AF', textDecoration: 'none',
-                    fontSize: 13, fontWeight: 600,
-                  }}>📞 Call</a>
+                <Field label="Assigned To">
+                  <select
+                    value={form.assigned_to_name}
+                    onChange={(e) => setField('assigned_to_name', e.target.value)}
+                    className={inputClassName}
+                  >
+                    <option value="">Unassigned</option>
+                    {executives.map((ex) => (
+                      <option key={ex.id} value={ex.full_name}>
+                        {ex.full_name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
               </div>
+            </SectionCard>
+
+            <SectionCard title="Follow-up & Priority">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Follow-up Date">
+                  <input
+                    type="date"
+                    value={form.follow_up_date}
+                    onChange={(e) => setField('follow_up_date', e.target.value)}
+                    className={inputClassName}
+                  />
+                </Field>
+
+                <Field label="Priority">
+                  <select
+                    value={form.priority}
+                    onChange={(e) => setField('priority', e.target.value)}
+                    className={inputClassName}
+                  >
+                    <option value="">None</option>
+                    <option value="High">High</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Low">Low</option>
+                  </select>
+                </Field>
+              </div>
+            </SectionCard>
+
+            {(whatsappHref || callHref) && (
+              <SectionCard title="Contact">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {whatsappHref ? (
+                    <a
+                      href={whatsappHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-xl bg-emerald-50 px-4 py-3 text-center text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+                    >
+                      WhatsApp
+                    </a>
+                  ) : (
+                    <div />
+                  )}
+
+                  {callHref ? (
+                    <a
+                      href={callHref}
+                      className="rounded-xl bg-blue-50 px-4 py-3 text-center text-sm font-medium text-blue-700 hover:bg-blue-100"
+                    >
+                      Call
+                    </a>
+                  ) : (
+                    <div />
+                  )}
+                </div>
+              </SectionCard>
+            )}
+
+            <SectionCard title="Notes">
+              <div className="grid gap-4">
+                <Field label="Remarks">
+                  <textarea
+                    rows={4}
+                    value={form.remarks}
+                    onChange={(e) => setField('remarks', e.target.value)}
+                    className={`${inputClassName} min-h-[110px] resize-y`}
+                  />
+                </Field>
+
+                <Field label="Reason">
+                  <textarea
+                    rows={3}
+                    value={form.reason}
+                    onChange={(e) => setField('reason', e.target.value)}
+                    className={`${inputClassName} min-h-[90px] resize-y`}
+                  />
+                </Field>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Conversion Details">
+              <div className="grid gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <ToggleField
+                    label="Converted"
+                    value={form.converted}
+                    onChange={(value) => setField('converted', value)}
+                  />
+                  <ToggleField
+                    label="Docs Received"
+                    value={form.documents_received}
+                    onChange={(value) => setField('documents_received', value)}
+                  />
+                </div>
+
+                <Field label="Go Live Date">
+                  <input
+                    type="date"
+                    value={form.go_live_date}
+                    onChange={(e) => setField('go_live_date', e.target.value)}
+                    className={inputClassName}
+                  />
+                </Field>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Read Only">
+              <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
+                <ReadOnlyItem label="Restaurant Name" value={restaurant.restaurant_name} />
+                <ReadOnlyItem label="Owner" value={restaurant.owner_name} />
+                <ReadOnlyItem label="Phone" value={restaurant.phone} />
+                <ReadOnlyItem label="City" value={restaurant.city} />
+                <ReadOnlyItem label="Source Sheet" value={restaurant.source_sheet} />
+                <ReadOnlyItem label="Last Updated" value={restaurant.updated_at} />
+              </div>
+            </SectionCard>
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
+          {errorMessage && (
+            <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {errorMessage}
             </div>
           )}
 
-          {/* Follow Up Date */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Follow-up Date</label>
-            <input
-              type="date"
-              defaultValue={r.follow_up_date || ''}
-              onChange={e => updateField({ follow_up_date: e.target.value })}
-              style={inputStyle}
-            />
-          </div>
+          {savedMessage && (
+            <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {savedMessage}
+            </div>
+          )}
 
-          {/* Priority */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Priority</label>
-            <select
-              defaultValue={r.priority || ''}
-              onChange={e => updateField({ priority: e.target.value })}
-              style={selectStyle}
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={handleReset}
+              disabled={loading || !isDirty}
+              className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <option value="">None</option>
-              <option value="High">High</option>
-              <option value="Medium">Medium</option>
-              <option value="Low">Low</option>
-            </select>
-          </div>
+              Reset
+            </button>
 
-          {/* Remarks */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Remarks</label>
-            <textarea
-              defaultValue={r.remarks || ''}
-              onBlur={e => updateField({ remarks: e.target.value })}
-              rows={3}
-              style={{ ...inputStyle, resize: 'vertical', minHeight: 80 }}
-            />
-          </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onClose}
+                disabled={loading}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
 
-          {/* Toggles */}
-          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-            <ToggleField label="Converted" value={r.converted}
-              onChange={v => updateField({ converted: v })} />
-            <ToggleField label="Docs Received" value={r.documents_received}
-              onChange={v => updateField({ documents_received: v })} />
+              <button
+                onClick={handleSave}
+                disabled={loading || !isDirty}
+                className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
           </div>
-
-          {/* Reason */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Reason</label>
-            <textarea
-              defaultValue={r.reason || ''}
-              onBlur={e => updateField({ reason: e.target.value })}
-              rows={2}
-              style={{ ...inputStyle, resize: 'vertical' }}
-            />
-          </div>
-
-          {/* Go Live Date */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Go Live Date</label>
-            <input
-              type="date"
-              defaultValue={r.go_live_date || ''}
-              onChange={e => updateField({ go_live_date: e.target.value })}
-              style={inputStyle}
-            />
-          </div>
-
-          {loading && <div style={{ fontSize: 12, color: '#6B6560', marginTop: 8 }}>Saving...</div>}
         </div>
       </div>
     </>
   )
 }
 
-function ToggleField({ label, value, onChange }: {
-  label: string; value: boolean | null; onChange: (v: boolean) => void
+function SectionCard({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
 }) {
   return (
-    <div style={{
-      flex: 1, padding: '12px 14px', borderRadius: 10,
-      border: '1px solid #E8E4DE', background: '#F8F6F3',
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    }}>
-      <span style={{ fontSize: 12, fontWeight: 600, color: '#6B6560', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
-      <button onClick={() => onChange(!value)} style={{
-        padding: '4px 12px', borderRadius: 999, border: 'none', cursor: 'pointer',
-        fontSize: 12, fontWeight: 600,
-        background: value ? '#D1FAE5' : '#E8E4DE',
-        color: value ? '#065F46' : '#6B6560',
-      }}>{value ? 'Yes' : 'No'}</button>
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {title}
+      </div>
+      {children}
     </div>
   )
 }
 
-const labelStyle: React.CSSProperties = {
-  display: 'block', fontSize: 11, fontWeight: 600,
-  textTransform: 'uppercase', letterSpacing: '0.05em',
-  color: '#9C9690', marginBottom: 6,
+function Field({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <label className="block">
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </div>
+      {children}
+    </label>
+  )
 }
 
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '10px 14px',
-  border: '1px solid #E8E4DE', borderRadius: 8,
-  fontSize: 14, color: '#1A1814', background: '#F5F3F0', outline: 'none',
+function ToggleField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: boolean
+  onChange: (value: boolean) => void
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+      <div className="text-sm font-medium text-slate-700">{label}</div>
+      <button
+        type="button"
+        onClick={() => onChange(!value)}
+        className={`rounded-full px-4 py-1.5 text-xs font-semibold ${
+          value
+            ? 'bg-emerald-100 text-emerald-700'
+            : 'bg-slate-200 text-slate-600'
+        }`}
+      >
+        {value ? 'Yes' : 'No'}
+      </button>
+    </div>
+  )
 }
 
-const selectStyle: React.CSSProperties = {
-  ...inputStyle, cursor: 'pointer',
+function ReadOnlyItem({
+  label,
+  value,
+}: {
+  label: string
+  value: any
+}) {
+  return (
+    <div className="rounded-xl bg-slate-50 px-4 py-3">
+      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </div>
+      <div className="break-words text-sm text-slate-800">
+        {value ? String(value) : '-'}
+      </div>
+    </div>
+  )
 }
+
+const inputClassName =
+  'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white'

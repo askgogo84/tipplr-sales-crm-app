@@ -58,10 +58,11 @@ export async function POST(req: NextRequest) {
       updates.converted !== undefined ? updates.converted : current.converted
 
     const newStatus = normalizeStatus(nextLeadStatus, nextConverted)
+    const nowIso = new Date().toISOString()
 
     const payload = {
       ...updates,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
     }
 
     const { data: saved, error: saveError } = await supabase
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
           updates.assigned_to_name ||
           current.assigned_to_name ||
           "System",
+        changed_at: nowIso,
         note: statusChanged
           ? `Status changed from ${oldStatus} to ${newStatus}`
           : "Assignment updated",
