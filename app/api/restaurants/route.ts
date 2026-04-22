@@ -22,21 +22,15 @@ function normalizeBoolean(value: unknown): boolean | null {
   return null
 }
 
-export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url)
+async function fetchAllRestaurantsInBatches() {
+  const batchSize = 1000
+  let from = 0
+  let allRows: any[] = []
 
-    const page = Math.max(Number(searchParams.get('page') || '1'), 1)
-    const pageSize = Math.max(Number(searchParams.get('pageSize') || '100'), 1)
-    const search = (searchParams.get('search') || '').trim().toLowerCase()
-    const status = (searchParams.get('status') || '').trim()
-    const followUp = (searchParams.get('followUp') || '').trim()
-    const assignedTo = (searchParams.get('assignedTo') || '').trim()
-    const sourceSheet = (searchParams.get('sourceSheet') || '').trim()
+  while (true) {
+    const to = from + batchSize - 1
 
-    const today = new Date().toISOString().slice(0, 10)
-
-    const { data: rows, error } = await supabase
+    const { data, error } = await supabase
       .from('restaurants')
       .select(`
         id,
@@ -59,21 +53,44 @@ export async function GET(req: NextRequest) {
         go_live_date
       `)
       .order('updated_at', { ascending: false, nullsFirst: false })
+      .range(from, to)
 
     if (error) {
-      return NextResponse.json(
-        { success: false, error: error.message, data: [] },
-        { status: 500 }
-      )
+      throw new Error(error.message)
     }
 
-    const allRows =
-      (rows || [])
-        .filter((row: any) => row.source_sheet !== 'Deactivated Outlets')
-        .map((row: any) => ({
-          ...row,
-          lead_status: normalizeStatus(row.lead_status, row.converted),
-        }))
+    const rows = data || []
+    allRows = allRows.concat(rows)
+
+    if (rows.length < batchSize) break
+    from += batchSize
+  }
+
+  return allRows
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+
+    const page = Math.max(Number(searchParams.get('page') || '1'), 1)
+    const pageSize = Math.max(Number(searchParams.get('pageSize') || '100'), 1)
+    const search = (searchParams.get('search') || '').trim().toLowerCase()
+    const status = (searchParams.get('status') || '').trim()
+    const followUp = (searchParams.get('followUp') || '').trim()
+    const assignedTo = (searchParams.get('assignedTo') || '').trim()
+    const sourceSheet = (searchParams.get('sourceSheet') || '').trim()
+
+    const today = new Date().toISOString().slice(0, 10)
+
+    const rows = await fetchAllRestaurantsInBatches()
+
+    const allRows = (rows || [])
+      .filter((row: any) => row.source_sheet !== 'Deactivated Outlets')
+      .map((row: any) => ({
+        ...row,
+        lead_status: normalizeStatus(row.lead_status, row.converted),
+      }))
 
     let filtered = [...allRows]
 
@@ -155,7 +172,6 @@ export async function GET(req: NextRequest) {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown server error'
-
     return NextResponse.json(
       { success: false, error: message, data: [] },
       { status: 500 }
