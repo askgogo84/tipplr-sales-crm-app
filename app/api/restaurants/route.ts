@@ -36,12 +36,13 @@ export async function GET(req: NextRequest) {
     const status = (searchParams.get('status') || '').trim()
     const followUp = (searchParams.get('followUp') || '').trim()
     const assignedTo = (searchParams.get('assignedTo') || '').trim()
+    const sourceSheet = (searchParams.get('sourceSheet') || '').trim()
 
     const today = new Date().toISOString().slice(0, 10)
 
     const allRows = await fetchAllActiveRestaurants(
       supabase,
-      'id, restaurant_name, owner_name, phone, city, area, lead_status, assigned_to_name, follow_up_date, remarks, updated_at, converted, source_sheet, is_deactivated'
+      'id, restaurant_name, owner_name, phone, city, area, lead_status, assigned_to_name, follow_up_date, follow_up_status, last_follow_up_note, remarks, updated_at, converted, source_sheet, is_deactivated, priority, documents_received, reason, go_live_date'
     )
 
     const stats = buildCrmMetrics(allRows)
@@ -75,6 +76,10 @@ export async function GET(req: NextRequest) {
       filtered = filtered.filter((row: any) => row.assigned_to_name === assignedTo)
     }
 
+    if (sourceSheet) {
+      filtered = filtered.filter((row: any) => row.source_sheet === sourceSheet)
+    }
+
     if (followUp === 'today') {
       filtered = filtered.filter((row: any) => row.follow_up_date === today)
     } else if (followUp === 'overdue') {
@@ -94,6 +99,14 @@ export async function GET(req: NextRequest) {
     const to = from + pageSize
     const paged = filtered.slice(from, to)
 
+    const sourceSheets = Array.from(
+      new Set(
+        allRows
+          .map((row: any) => row.source_sheet)
+          .filter(Boolean)
+      )
+    ).sort()
+
     return NextResponse.json({
       success: true,
       data: paged,
@@ -103,6 +116,9 @@ export async function GET(req: NextRequest) {
         agreedTillDate: stats.agreedTillDate,
         closuresTillDate: stats.closuresTillDate,
         unassigned: stats.unassigned,
+      },
+      filters: {
+        sourceSheets,
       },
       pagination: {
         page,
