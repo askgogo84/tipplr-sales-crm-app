@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic'
+﻿export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -48,8 +48,6 @@ export async function GET(req: NextRequest) {
         lead_status,
         assigned_to_name,
         follow_up_date,
-        follow_up_status,
-        last_follow_up_note,
         remarks,
         updated_at,
         converted,
