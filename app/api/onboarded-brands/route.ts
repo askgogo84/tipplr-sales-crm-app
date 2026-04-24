@@ -106,20 +106,22 @@ export async function GET(req: NextRequest) {
         )
     )
 
-    const { data: allConvertedRows, error: allConvertedError } = await supabase
+    // Fetch master converted list without PostgREST OR filters.
+    // This is more stable because the CRM has mixed data: lead_status and converted boolean.
+    const { data: allRestaurantRows, error: allRowsError } = await supabase
       .from('restaurants')
       .select('restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted')
-      .or('lead_status.ilike.Converted,converted.eq.true')
       .order('updated_at', { ascending: false })
+      .limit(10000)
 
-    if (allConvertedError) {
+    if (allRowsError) {
       return NextResponse.json(
-        { success: false, error: allConvertedError.message },
+        { success: false, error: allRowsError.message },
         { status: 500 }
       )
     }
 
-    const allBrands = (allConvertedRows || [])
+    const allBrands = (allRestaurantRows || [])
       .filter(isConverted)
       .map((row: any) => ({
         brand_name: row.restaurant_name || '—',
