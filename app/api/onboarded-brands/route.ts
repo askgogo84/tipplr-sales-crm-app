@@ -45,54 +45,66 @@ function isConverted(row: any) {
   return status === 'converted' || row.converted === true
 }
 
-function matchesSearch(row: any, values: unknown[], search: string) {
+function matchesSearch(values: unknown[], search: string) {
   if (!search) return true
   return values
     .filter(Boolean)
     .some((v) => String(v).toLowerCase().includes(search))
 }
 
+function uniqueByBrandAndSheet(rows: any[]) {
+  const seen = new Set<string>()
+  const unique: any[] = []
+
+  for (const row of rows) {
+    const key = `${String(row.brand_name || '').toLowerCase()}::${String(row.source_sheet || '').toLowerCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(row)
+  }
+
+  return unique
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-    const from = (searchParams.get('from') || '').trim()
-    const to = (searchParams.get('to') || '').trim()
+    const requestedDate =
+      (searchParams.get('date') || searchParams.get('from') || '').trim()
     const search = (searchParams.get('search') || '').trim().toLowerCase()
 
-    const defaultYesterday = getDefaultYesterdayIST()
-    const fromDate = from || defaultYesterday
-    const toDate = to || defaultYesterday
+    const selectedDate = requestedDate || getDefaultYesterdayIST()
+    const fromUtc = startOfISTDayUtc(selectedDate)
+    const toUtc = endOfISTDayUtc(selectedDate)
 
-    const fromUtc = startOfISTDayUtc(fromDate)
-    const toUtc = endOfISTDayUtc(toDate)
+    const { data: dailyLogs, error: dailyLogsError } = await supabase
+      .from('restaurant_activity_log')
+      .select('restaurant_name, source_sheet, changed_by, new_status, created_at')
+      .eq('new_status', 'Converted')
+      .gte('created_at', fromUtc)
+      .lte('created_at', toUtc)
+      .order('created_at', { ascending: false })
 
-    const { data: rangeRows, error: rangeError } = await supabase
-      .from('restaurants')
-      .select('restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted')
-      .or('lead_status.ilike.Converted,converted.eq.true')
-      .gte('updated_at', fromUtc)
-      .lte('updated_at', toUtc)
-      .order('updated_at', { ascending: false })
-
-    if (rangeError) {
+    if (dailyLogsError) {
       return NextResponse.json(
-        { success: false, error: rangeError.message },
+        { success: false, error: dailyLogsError.message },
         { status: 500 }
       )
     }
 
-    let selectedRangeBrands = (rangeRows || [])
-      .filter(isConverted)
-      .map((row: any) => ({
-        brand_name: row.restaurant_name || '—',
-        converted_at: row.updated_at || row.synced_at,
-        converted_at_label: formatDateTimeIST(row.updated_at || row.synced_at),
-        changed_by: row.assigned_to_name || 'Sheet Sync',
-        source_sheet: row.source_sheet || '—',
-      }))
-      .filter((row: any) =>
-        matchesSearch(row, [row.brand_name, row.changed_by, row.source_sheet], search)
-      )
+    const dailyBrands = uniqueByBrandAndSheet(
+      (dailyLogs || [])
+        .map((row: any) => ({
+          brand_name: row.restaurant_name || '—',
+          converted_at: row.created_at,
+          converted_at_label: formatDateTimeIST(row.created_at),
+          changed_by: row.changed_by || 'System',
+          source_sheet: row.source_sheet || '—',
+        }))
+        .filter((row: any) =>
+          matchesSearch([row.brand_name, row.changed_by, row.source_sheet], search)
+        )
+    )
 
     const { data: allConvertedRows, error: allConvertedError } = await supabase
       .from('restaurants')
@@ -107,7 +119,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    let allBrands = (allConvertedRows || [])
+    const allBrands = (allConvertedRows || [])
       .filter(isConverted)
       .map((row: any) => ({
         brand_name: row.restaurant_name || '—',
@@ -117,18 +129,19 @@ export async function GET(req: NextRequest) {
         last_updated_label: formatDateTimeIST(row.updated_at || row.synced_at),
       }))
       .filter((row: any) =>
-        matchesSearch(row, [row.brand_name, row.assigned_to, row.source_sheet], search)
+        matchesSearch([row.brand_name, row.assigned_to, row.source_sheet], search)
       )
 
     return NextResponse.json({
       success: true,
       summary: {
-        fromDate,
-        toDate,
-        yesterdayCount: selectedRangeBrands.length,
+        selectedDate,
+        fromDate: selectedDate,
+        toDate: selectedDate,
+        yesterdayCount: dailyBrands.length,
         totalBrandsTillDate: allBrands.length,
       },
-      yesterdayBrands: selectedRangeBrands,
+      yesterdayBrands: dailyBrands,
       allBrands,
     })
   } catch (error) {
