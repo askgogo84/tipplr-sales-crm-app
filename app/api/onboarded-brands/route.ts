@@ -20,14 +20,6 @@ function getDefaultYesterdayIST() {
   return getISTDateString(istDate)
 }
 
-function startOfISTDayUtc(dateStr: string) {
-  return new Date(`${dateStr}T00:00:00+05:30`).toISOString()
-}
-
-function endOfISTDayUtc(dateStr: string) {
-  return new Date(`${dateStr}T23:59:59.999+05:30`).toISOString()
-}
-
 function formatDateTimeIST(value: string | null) {
   if (!value) return '—'
   return new Date(value).toLocaleString('en-IN', {
@@ -39,6 +31,42 @@ function formatDateTimeIST(value: string | null) {
     minute: '2-digit',
     hour12: true,
   })
+}
+
+function formatDateLabel(dateStr: string) {
+  return new Date(`${dateStr}T12:00:00+05:30`).toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function normalizeSheetDate(value: unknown): string | null {
+  if (value === null || value === undefined) return null
+
+  const raw = String(value).trim()
+  if (!raw) return null
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+  }
+
+  const indianMatch = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/)
+  if (indianMatch) {
+    const [, d, m, yRaw] = indianMatch
+    const y = yRaw.length === 2 ? `20${yRaw}` : yRaw
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+  }
+
+  const parsed = new Date(raw)
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  }
+
+  return null
 }
 
 function matchesSearch(values: unknown[], search: string) {
@@ -70,31 +98,26 @@ export async function GET(req: NextRequest) {
     const search = (searchParams.get('search') || '').trim().toLowerCase()
 
     const selectedDate = requestedDate || getDefaultYesterdayIST()
-    const fromUtc = startOfISTDayUtc(selectedDate)
-    const toUtc = endOfISTDayUtc(selectedDate)
 
-    const { data: dailyLogs, error: dailyLogsError } = await supabase
-      .from('restaurant_activity_log')
-      .select('restaurant_name, source_sheet, changed_by, new_status, created_at')
-      .eq('new_status', 'Converted')
-      .gte('created_at', fromUtc)
-      .lte('created_at', toUtc)
-      .order('created_at', { ascending: false })
+    const allRestaurantRows = await fetchAllActiveRestaurants(
+      supabase,
+      'id, restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted, is_deactivated, go_live_date'
+    )
 
-    if (dailyLogsError) {
-      return NextResponse.json(
-        { success: false, error: dailyLogsError.message },
-        { status: 500 }
-      )
-    }
+    const convertedRows = (allRestaurantRows || []).filter(
+      (row: any) => normalizeStatus(row.lead_status, row.converted) === 'converted'
+    )
 
+    // Daily onboarded brands should come from the sheet's actual Go Live Date.
+    // We should not use updated_at because manual sync updates old converted rows together.
     const dailyBrands = uniqueByBrandAndSheet(
-      (dailyLogs || [])
+      convertedRows
+        .filter((row: any) => normalizeSheetDate(row.go_live_date) === selectedDate)
         .map((row: any) => ({
           brand_name: row.restaurant_name || '—',
-          converted_at: row.created_at,
-          converted_at_label: formatDateTimeIST(row.created_at),
-          changed_by: row.changed_by || 'System',
+          converted_at: normalizeSheetDate(row.go_live_date) || selectedDate,
+          converted_at_label: formatDateLabel(normalizeSheetDate(row.go_live_date) || selectedDate),
+          changed_by: row.assigned_to_name || 'Sheet Sync',
           source_sheet: row.source_sheet || '—',
         }))
         .filter((row: any) =>
@@ -102,13 +125,7 @@ export async function GET(req: NextRequest) {
         )
     )
 
-    const allRestaurantRows = await fetchAllActiveRestaurants(
-      supabase,
-      'id, restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted, is_deactivated'
-    )
-
-    const allBrands = (allRestaurantRows || [])
-      .filter((row: any) => normalizeStatus(row.lead_status, row.converted) === 'converted')
+    const allBrands = convertedRows
       .map((row: any) => ({
         brand_name: row.restaurant_name || '—',
         assigned_to: row.assigned_to_name || 'Unassigned',
