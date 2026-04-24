@@ -1,98 +1,130 @@
-﻿export const dynamic = "force-dynamic"
+﻿export const dynamic = 'force-dynamic'
 
-import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-function normalizeBrandName(name: string | null | undefined) {
-  return (name || "").trim().replace(/\s+/g, " ")
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+function formatDateOnly(d: Date) {
+  return d.toISOString().slice(0, 10)
 }
 
-export async function GET() {
+function startOfDay(dateStr: string) {
+  return `${dateStr}T00:00:00.000Z`
+}
+
+function endOfDay(dateStr: string) {
+  return `${dateStr}T23:59:59.999Z`
+}
+
+function formatDateTimeIST(value: string | null) {
+  if (!value) return '—'
+  return new Date(value).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+}
+
+export async function GET(req: NextRequest) {
   try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const { searchParams } = new URL(req.url)
+    const from = (searchParams.get('from') || '').trim()
+    const to = (searchParams.get('to') || '').trim()
+    const search = (searchParams.get('search') || '').trim().toLowerCase()
 
-    const yesterdayStart = new Date()
-    yesterdayStart.setDate(yesterdayStart.getDate() - 1)
-    yesterdayStart.setHours(0, 0, 0, 0)
+    const now = new Date()
+    const yesterday = new Date(now)
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+    const yesterdayStr = formatDateOnly(yesterday)
 
-    const yesterdayEnd = new Date(yesterdayStart)
-    yesterdayEnd.setHours(23, 59, 59, 999)
+    const fromDate = from || yesterdayStr
+    const toDate = to || yesterdayStr
 
-    const yesterdayStartIso = yesterdayStart.toISOString()
-    const yesterdayEndIso = yesterdayEnd.toISOString()
+    const { data: convertedLogs, error: convertedLogsError } = await supabase
+      .from('restaurant_activity_log')
+      .select('restaurant_name, source_sheet, changed_by, new_status, created_at')
+      .eq('new_status', 'Converted')
+      .gte('created_at', startOfDay(fromDate))
+      .lte('created_at', endOfDay(toDate))
+      .order('created_at', { ascending: false })
 
-    const { data: yesterdayActivity, error: yesterdayError } = await supabase
-      .from("restaurant_activity_log")
-      .select("restaurant_name, changed_at, changed_by, source_sheet, new_status")
-      .gte("changed_at", yesterdayStartIso)
-      .lte("changed_at", yesterdayEndIso)
-      .eq("new_status", "Converted")
-      .order("changed_at", { ascending: false })
-
-    if (yesterdayError) {
+    if (convertedLogsError) {
       return NextResponse.json(
-        { success: false, error: yesterdayError.message },
+        { success: false, error: convertedLogsError.message },
         { status: 500 }
       )
     }
 
-    const { data: convertedRows, error: convertedError } = await supabase
-      .from("restaurants")
-      .select("restaurant_name, source_sheet, assigned_to_name, updated_at, lead_status, converted")
-      .not("source_sheet", "is", null)
-      .neq("source_sheet", "Deactivated Outlets")
-      .or("lead_status.eq.Converted,converted.eq.true")
-      .order("restaurant_name", { ascending: true })
+    let filteredYesterday = (convertedLogs || []).map((row: any) => ({
+      brand_name: row.restaurant_name || '—',
+      converted_at: row.created_at,
+      converted_at_label: formatDateTimeIST(row.created_at),
+      changed_by: row.changed_by || 'System',
+      source_sheet: row.source_sheet || '—',
+    }))
 
-    if (convertedError) {
+    if (search) {
+      filteredYesterday = filteredYesterday.filter((row: any) =>
+        [row.brand_name, row.changed_by, row.source_sheet]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(search))
+      )
+    }
+
+    const { data: allConvertedRows, error: allConvertedError } = await supabase
+      .from('restaurants')
+      .select('restaurant_name, assigned_to_name, source_sheet, updated_at, lead_status, converted')
+      .or('lead_status.eq.Converted,converted.eq.true')
+      .order('updated_at', { ascending: false })
+
+    if (allConvertedError) {
       return NextResponse.json(
-        { success: false, error: convertedError.message },
+        { success: false, error: allConvertedError.message },
         { status: 500 }
       )
     }
 
-    const yesterdayMap = new Map<string, any>()
-    for (const row of yesterdayActivity || []) {
-      const brand = normalizeBrandName(row.restaurant_name)
-      if (!brand) continue
-      if (!yesterdayMap.has(brand)) {
-        yesterdayMap.set(brand, {
-          brand_name: brand,
-          converted_at: row.changed_at,
-          changed_by: row.changed_by || "-",
-          source_sheet: row.source_sheet || "-",
-        })
-      }
-    }
+    let allBrands = (allConvertedRows || []).map((row: any) => ({
+      brand_name: row.restaurant_name || '—',
+      assigned_to: row.assigned_to_name || 'Unassigned',
+      source_sheet: row.source_sheet || '—',
+      last_updated: row.updated_at,
+      last_updated_label: formatDateTimeIST(row.updated_at),
+    }))
 
-    const allMap = new Map<string, any>()
-    for (const row of convertedRows || []) {
-      const brand = normalizeBrandName(row.restaurant_name)
-      if (!brand) continue
-      if (!allMap.has(brand)) {
-        allMap.set(brand, {
-          brand_name: brand,
-          source_sheet: row.source_sheet || "-",
-          assigned_to_name: row.assigned_to_name || "-",
-          updated_at: row.updated_at || null,
-        })
-      }
+    if (search) {
+      allBrands = allBrands.filter((row: any) =>
+        [row.brand_name, row.assigned_to, row.source_sheet]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(search))
+      )
     }
 
     return NextResponse.json({
       success: true,
-      yesterdayCount: yesterdayMap.size,
-      totalConvertedBrands: allMap.size,
-      yesterdayBrands: Array.from(yesterdayMap.values()),
-      allBrands: Array.from(allMap.values()),
+      summary: {
+        fromDate,
+        toDate,
+        yesterdayCount: filteredYesterday.length,
+        totalBrandsTillDate: allBrands.length,
+      },
+      yesterdayBrands: filteredYesterday,
+      allBrands,
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error"
     return NextResponse.json(
-      { success: false, error: message, rows: [] },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     )
   }
