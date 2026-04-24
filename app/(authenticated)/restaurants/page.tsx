@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import RestaurantDetailPanel from '@/components/restaurant-detail'
@@ -487,4 +487,3 @@ export default function RestaurantsPage() {
     </div>
   )
 }
-PS C:\Users\gover\tipplr-crm-app> 
