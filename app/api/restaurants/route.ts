@@ -1,13 +1,23 @@
-﻿export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { normalizeStatus } from '@/lib/crm-metrics'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl) {
+    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
+  }
+
+  if (!serviceRoleKey) {
+    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey)
+}
 
 function clean(value: unknown) {
   const s = String(value ?? '').trim()
@@ -28,7 +38,7 @@ function canonicalStatus(status: string | null | undefined, converted?: boolean 
     .toLowerCase()
 }
 
-async function fetchAllRestaurantsInBatches() {
+async function fetchAllRestaurantsInBatches(supabase: any) {
   const batchSize = 1000
   let from = 0
   let allRows: any[] = []
@@ -77,6 +87,7 @@ async function fetchAllRestaurantsInBatches() {
 
 export async function GET(req: NextRequest) {
   try {
+    const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(req.url)
 
     const page = Math.max(Number(searchParams.get('page') || '1'), 1)
@@ -89,7 +100,7 @@ export async function GET(req: NextRequest) {
 
     const today = new Date().toISOString().slice(0, 10)
 
-    const rows = await fetchAllRestaurantsInBatches()
+    const rows = await fetchAllRestaurantsInBatches(supabase)
 
     const allRows = (rows || [])
       .filter((row: any) => row.source_sheet !== 'Deactivated Outlets')
@@ -191,6 +202,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = getSupabaseAdmin()
     const body = await req.json()
 
     const restaurant_name = clean(body.restaurant_name)
