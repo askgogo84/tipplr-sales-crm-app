@@ -4,10 +4,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { fetchAllActiveRestaurants, normalizeStatus } from '@/lib/crm-metrics'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl) {
+    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
+  }
+
+  if (!serviceRoleKey) {
+    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey)
+}
 
 function getISTDateString(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
@@ -92,6 +102,7 @@ function uniqueByBrandAndSheet(rows: any[]) {
 
 export async function GET(req: NextRequest) {
   try {
+    const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(req.url)
     const requestedDate =
       (searchParams.get('date') || searchParams.get('from') || '').trim()
@@ -108,8 +119,6 @@ export async function GET(req: NextRequest) {
       (row: any) => normalizeStatus(row.lead_status, row.converted) === 'converted'
     )
 
-    // Daily onboarded brands should come from the sheet's actual Go Live Date.
-    // We should not use updated_at because manual sync updates old converted rows together.
     const dailyBrands = uniqueByBrandAndSheet(
       convertedRows
         .filter((row: any) => normalizeSheetDate(row.go_live_date) === selectedDate)
