@@ -212,16 +212,36 @@ export default function RestaurantsPage() {
     setPanelOpen(true)
   }
 
+  function handleDownloadCsv() {
+    const params = new URLSearchParams()
+
+    if (search.trim()) params.set('search', search.trim())
+    if (statusFilter.trim()) params.set('status', statusFilter.trim())
+    if (followUpFilter.trim()) params.set('followUp', followUpFilter.trim())
+    if (sourceSheetFilter.trim()) params.set('sourceSheet', sourceSheetFilter.trim())
+
+    window.open(`/api/restaurants/export?${params.toString()}`, '_blank')
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
-        <div>
-          <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-slate-900">
-            Restaurants
-          </h1>
-          <p className="mt-1 sm:mt-2 text-sm text-slate-500">
-            Track restaurants, owners, assignments, and follow-ups
-          </p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-slate-900">
+              Restaurants
+            </h1>
+            <p className="mt-1 sm:mt-2 text-sm text-slate-500">
+              Track restaurants, owners, assignments, and follow-ups
+            </p>
+          </div>
+
+          <button
+            onClick={handleDownloadCsv}
+            className="inline-flex h-11 items-center justify-center rounded-2xl bg-slate-900 px-5 text-sm font-medium text-white transition hover:bg-slate-800"
+          >
+            Download CSV
+          </button>
         </div>
 
         <div className="mt-4 sm:mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
@@ -467,3 +487,4 @@ export default function RestaurantsPage() {
     </div>
   )
 }
+PS C:\Users\gover\tipplr-crm-app> 
