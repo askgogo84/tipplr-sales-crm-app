@@ -14,21 +14,36 @@ type AllBrand = {
   brand_name: string
   assigned_to: string
   source_sheet: string
-  last_updated: string
+  last_updated: string | null
   last_updated_label: string
 }
 
-type ApiResponse = {
+type DailyApiResponse = {
   success: boolean
   summary: {
     selectedDate?: string
     fromDate: string
     toDate: string
     yesterdayCount: number
-    totalBrandsTillDate: number
   }
   yesterdayBrands: DailyBrand[]
-  allBrands: AllBrand[]
+}
+
+type RestaurantsApiResponse = {
+  success: boolean
+  data: Array<{
+    restaurant_name: string | null
+    assigned_to_name: string | null
+    source_sheet: string | null
+    updated_at: string | null
+    synced_at?: string | null
+  }>
+  stats: {
+    convertedTillDate: number
+  }
+  pagination: {
+    total: number
+  }
 }
 
 function getDefaultYesterdayIST() {
@@ -38,6 +53,19 @@ function getDefaultYesterdayIST() {
   return istDate.toLocaleDateString('en-CA')
 }
 
+function formatDateTimeIST(value: string | null | undefined) {
+  if (!value) return '—'
+  return new Date(value).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+}
+
 export default function OnboardedBrandsPage() {
   const defaultDate = getDefaultYesterdayIST()
 
@@ -45,11 +73,10 @@ export default function OnboardedBrandsPage() {
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [loading, setLoading] = useState(true)
+  const [errorText, setErrorText] = useState('')
 
   const [summary, setSummary] = useState({
     selectedDate: defaultDate,
-    fromDate: defaultDate,
-    toDate: defaultDate,
     yesterdayCount: 0,
     totalBrandsTillDate: 0,
   })
@@ -60,37 +87,67 @@ export default function OnboardedBrandsPage() {
   async function loadData(currentDate = selectedDate, currentSearch = search) {
     try {
       setLoading(true)
+      setErrorText('')
 
-      const params = new URLSearchParams()
-      if (currentDate) params.set('date', currentDate)
-      if (currentSearch.trim()) params.set('search', currentSearch.trim())
+      const dailyParams = new URLSearchParams()
+      if (currentDate) dailyParams.set('date', currentDate)
+      if (currentSearch.trim()) dailyParams.set('search', currentSearch.trim())
 
-      const res = await fetch(`/api/onboarded-brands?${params.toString()}`, {
-        cache: 'no-store',
+      const convertedParams = new URLSearchParams({
+        status: 'Converted',
+        page: '1',
+        pageSize: '100',
       })
+      if (currentSearch.trim()) convertedParams.set('search', currentSearch.trim())
 
-      const data: ApiResponse = await res.json()
+      const [dailyRes, convertedRes] = await Promise.all([
+        fetch(`/api/onboarded-brands?${dailyParams.toString()}`, { cache: 'no-store' }),
+        fetch(`/api/restaurants?${convertedParams.toString()}`, { cache: 'no-store' }),
+      ])
 
-      if (!res.ok || !data.success) {
-        console.error('Onboarded brands API error:', data)
+      const dailyData: DailyApiResponse = await dailyRes.json()
+      const convertedData: RestaurantsApiResponse = await convertedRes.json()
+
+      if (!dailyRes.ok || !dailyData.success) {
+        console.error('Daily onboarded API error:', dailyData)
         setDailyBrands([])
+      } else {
+        setDailyBrands(dailyData.yesterdayBrands || [])
+      }
+
+      if (!convertedRes.ok || !convertedData.success) {
+        console.error('Converted restaurants API error:', convertedData)
         setAllBrands([])
+        setSummary({
+          selectedDate: dailyData?.summary?.selectedDate || currentDate,
+          yesterdayCount: dailyData?.summary?.yesterdayCount || 0,
+          totalBrandsTillDate: 0,
+        })
+        setErrorText('Could not load total onboarded brands from Restaurants API.')
         return
       }
 
+      const convertedRows = convertedData.data || []
+      const mappedAllBrands = convertedRows.map((row) => ({
+        brand_name: row.restaurant_name || '—',
+        assigned_to: row.assigned_to_name || 'Unassigned',
+        source_sheet: row.source_sheet || '—',
+        last_updated: row.updated_at || row.synced_at || null,
+        last_updated_label: formatDateTimeIST(row.updated_at || row.synced_at),
+      }))
+
+      setAllBrands(mappedAllBrands)
       setSummary({
-        selectedDate: data.summary.selectedDate || data.summary.fromDate,
-        fromDate: data.summary.fromDate,
-        toDate: data.summary.toDate,
-        yesterdayCount: data.summary.yesterdayCount,
-        totalBrandsTillDate: data.summary.totalBrandsTillDate,
+        selectedDate: dailyData?.summary?.selectedDate || dailyData?.summary?.fromDate || currentDate,
+        yesterdayCount: dailyData?.summary?.yesterdayCount || 0,
+        totalBrandsTillDate:
+          convertedData.stats?.convertedTillDate ?? convertedData.pagination?.total ?? mappedAllBrands.length,
       })
-      setDailyBrands(data.yesterdayBrands || [])
-      setAllBrands(data.allBrands || [])
     } catch (error) {
       console.error('Failed to load onboarded brands', error)
       setDailyBrands([])
       setAllBrands([])
+      setErrorText('Could not load onboarded brands. Please refresh after deployment completes.')
     } finally {
       setLoading(false)
     }
@@ -126,9 +183,11 @@ export default function OnboardedBrandsPage() {
   }
 
   function downloadAllCsv() {
-    const params = new URLSearchParams()
+    const params = new URLSearchParams({
+      status: 'Converted',
+    })
     if (search.trim()) params.set('search', search.trim())
-    window.open(`/api/onboarded-brands/export?type=all&${params.toString()}`, '_blank')
+    window.open(`/api/restaurants/export?${params.toString()}`, '_blank')
   }
 
   return (
@@ -141,6 +200,12 @@ export default function OnboardedBrandsPage() {
           Select one day to see brands newly onboarded on that day
         </p>
       </div>
+
+      {errorText && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {errorText}
+        </div>
+      )}
 
       <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[220px_minmax(0,1fr)_auto_auto_auto]">
@@ -265,7 +330,9 @@ export default function OnboardedBrandsPage() {
 
       <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-900">All Onboarded Brands Till Date</h2>
-        <p className="mt-1 text-sm text-slate-500">All brands currently marked as Converted</p>
+        <p className="mt-1 text-sm text-slate-500">
+          Showing first 100 currently converted brands. Use Download All CSV for the full export.
+        </p>
 
         <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
           <div className="grid grid-cols-4 gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
