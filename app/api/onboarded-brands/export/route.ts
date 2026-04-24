@@ -1,4 +1,4 @@
-﻿export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -8,16 +8,23 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-function formatDateOnly(d: Date) {
-  return d.toISOString().slice(0, 10)
+function getISTDateString(date = new Date()) {
+  return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
 
-function startOfDay(dateStr: string) {
-  return `${dateStr}T00:00:00.000Z`
+function getDefaultYesterdayIST() {
+  const now = new Date()
+  const istDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+  istDate.setDate(istDate.getDate() - 1)
+  return getISTDateString(istDate)
 }
 
-function endOfDay(dateStr: string) {
-  return `${dateStr}T23:59:59.999Z`
+function startOfISTDayUtc(dateStr: string) {
+  return new Date(`${dateStr}T00:00:00+05:30`).toISOString()
+}
+
+function endOfISTDayUtc(dateStr: string) {
+  return new Date(`${dateStr}T23:59:59.999+05:30`).toISOString()
 }
 
 function escapeCsv(value: unknown) {
@@ -41,6 +48,18 @@ function formatDateTimeIST(value: string | null) {
   })
 }
 
+function isConverted(row: any) {
+  const status = String(row.lead_status || '').trim().toLowerCase()
+  return status === 'converted' || row.converted === true
+}
+
+function matchesSearch(values: unknown[], search: string) {
+  if (!search) return true
+  return values
+    .filter(Boolean)
+    .some((v) => String(v).toLowerCase().includes(search))
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
@@ -49,19 +68,15 @@ export async function GET(req: NextRequest) {
     const to = (searchParams.get('to') || '').trim()
     const search = (searchParams.get('search') || '').trim().toLowerCase()
 
-    const now = new Date()
-    const yesterday = new Date(now)
-    yesterday.setUTCDate(yesterday.getUTCDate() - 1)
-    const yesterdayStr = formatDateOnly(yesterday)
-
-    const fromDate = from || yesterdayStr
-    const toDate = to || yesterdayStr
+    const defaultYesterday = getDefaultYesterdayIST()
+    const fromDate = from || defaultYesterday
+    const toDate = to || defaultYesterday
 
     if (type === 'all') {
       const { data, error } = await supabase
         .from('restaurants')
-        .select('restaurant_name, assigned_to_name, source_sheet, updated_at, lead_status, converted')
-        .or('lead_status.eq.Converted,converted.eq.true')
+        .select('restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted')
+        .or('lead_status.ilike.Converted,converted.eq.true')
         .order('updated_at', { ascending: false })
 
       if (error) {
@@ -71,20 +86,17 @@ export async function GET(req: NextRequest) {
         )
       }
 
-      let rows = (data || []).map((row: any) => ({
-        brand_name: row.restaurant_name || '—',
-        assigned_to: row.assigned_to_name || 'Unassigned',
-        source_sheet: row.source_sheet || '—',
-        last_updated: formatDateTimeIST(row.updated_at),
-      }))
-
-      if (search) {
-        rows = rows.filter((row: any) =>
-          [row.brand_name, row.assigned_to, row.source_sheet]
-            .filter(Boolean)
-            .some((v) => String(v).toLowerCase().includes(search))
+      const rows = (data || [])
+        .filter(isConverted)
+        .map((row: any) => ({
+          brand_name: row.restaurant_name || '—',
+          assigned_to: row.assigned_to_name || 'Unassigned',
+          source_sheet: row.source_sheet || '—',
+          last_updated: formatDateTimeIST(row.updated_at || row.synced_at),
+        }))
+        .filter((row: any) =>
+          matchesSearch([row.brand_name, row.assigned_to, row.source_sheet], search)
         )
-      }
 
       const headers = ['Brand Name', 'Assigned To', 'Source Sheet', 'Last Updated']
       const lines = [
@@ -99,9 +111,7 @@ export async function GET(req: NextRequest) {
         ),
       ]
 
-      const csv = '\uFEFF' + lines.join('\n')
-
-      return new NextResponse(csv, {
+      return new NextResponse('\uFEFF' + lines.join('\n'), {
         status: 200,
         headers: {
           'Content-Type': 'text/csv; charset=utf-8',
@@ -111,12 +121,12 @@ export async function GET(req: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('restaurant_activity_log')
-      .select('restaurant_name, source_sheet, changed_by, new_status, created_at')
-      .eq('new_status', 'Converted')
-      .gte('created_at', startOfDay(fromDate))
-      .lte('created_at', endOfDay(toDate))
-      .order('created_at', { ascending: false })
+      .from('restaurants')
+      .select('restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted')
+      .or('lead_status.ilike.Converted,converted.eq.true')
+      .gte('updated_at', startOfISTDayUtc(fromDate))
+      .lte('updated_at', endOfISTDayUtc(toDate))
+      .order('updated_at', { ascending: false })
 
     if (error) {
       return NextResponse.json(
@@ -125,20 +135,17 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    let rows = (data || []).map((row: any) => ({
-      brand_name: row.restaurant_name || '—',
-      converted_at: formatDateTimeIST(row.created_at),
-      changed_by: row.changed_by || 'System',
-      source_sheet: row.source_sheet || '—',
-    }))
-
-    if (search) {
-      rows = rows.filter((row: any) =>
-        [row.brand_name, row.changed_by, row.source_sheet]
-          .filter(Boolean)
-          .some((v) => String(v).toLowerCase().includes(search))
+    const rows = (data || [])
+      .filter(isConverted)
+      .map((row: any) => ({
+        brand_name: row.restaurant_name || '—',
+        converted_at: formatDateTimeIST(row.updated_at || row.synced_at),
+        changed_by: row.assigned_to_name || 'Sheet Sync',
+        source_sheet: row.source_sheet || '—',
+      }))
+      .filter((row: any) =>
+        matchesSearch([row.brand_name, row.changed_by, row.source_sheet], search)
       )
-    }
 
     const headers = ['Brand Name', 'Converted At', 'Changed By', 'Source Sheet']
     const lines = [
@@ -153,9 +160,7 @@ export async function GET(req: NextRequest) {
       ),
     ]
 
-    const csv = '\uFEFF' + lines.join('\n')
-
-    return new NextResponse(csv, {
+    return new NextResponse('\uFEFF' + lines.join('\n'), {
       status: 200,
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
