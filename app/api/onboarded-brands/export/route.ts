@@ -3,10 +3,20 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl) {
+    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
+  }
+
+  if (!serviceRoleKey) {
+    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey)
+}
 
 function getISTDateString(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
@@ -62,22 +72,23 @@ function matchesSearch(values: unknown[], search: string) {
 
 export async function GET(req: NextRequest) {
   try {
+    const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(req.url)
     const type = (searchParams.get('type') || 'range').trim()
-    const from = (searchParams.get('from') || '').trim()
-    const to = (searchParams.get('to') || '').trim()
+    const from = (searchParams.get('from') || searchParams.get('date') || '').trim()
+    const to = (searchParams.get('to') || searchParams.get('date') || '').trim()
     const search = (searchParams.get('search') || '').trim().toLowerCase()
 
     const defaultYesterday = getDefaultYesterdayIST()
     const fromDate = from || defaultYesterday
-    const toDate = to || defaultYesterday
+    const toDate = to || fromDate
 
     if (type === 'all') {
       const { data, error } = await supabase
         .from('restaurants')
         .select('restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted')
-        .or('lead_status.ilike.Converted,converted.eq.true')
         .order('updated_at', { ascending: false })
+        .limit(10000)
 
       if (error) {
         return NextResponse.json(
@@ -123,10 +134,10 @@ export async function GET(req: NextRequest) {
     const { data, error } = await supabase
       .from('restaurants')
       .select('restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted')
-      .or('lead_status.ilike.Converted,converted.eq.true')
       .gte('updated_at', startOfISTDayUtc(fromDate))
       .lte('updated_at', endOfISTDayUtc(toDate))
       .order('updated_at', { ascending: false })
+      .limit(10000)
 
     if (error) {
       return NextResponse.json(
