@@ -1,8 +1,8 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 
-type YesterdayBrand = {
+type DailyBrand = {
   brand_name: string
   converted_at: string
   converted_at_label: string
@@ -21,47 +21,48 @@ type AllBrand = {
 type ApiResponse = {
   success: boolean
   summary: {
+    selectedDate?: string
     fromDate: string
     toDate: string
     yesterdayCount: number
     totalBrandsTillDate: number
   }
-  yesterdayBrands: YesterdayBrand[]
+  yesterdayBrands: DailyBrand[]
   allBrands: AllBrand[]
 }
 
-function getDefaultYesterday() {
+function getDefaultYesterdayIST() {
   const now = new Date()
-  now.setDate(now.getDate() - 1)
-  return now.toISOString().slice(0, 10)
+  const istDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+  istDate.setDate(istDate.getDate() - 1)
+  return istDate.toLocaleDateString('en-CA')
 }
 
 export default function OnboardedBrandsPage() {
-  const yesterdayDefault = getDefaultYesterday()
+  const defaultDate = getDefaultYesterdayIST()
 
-  const [fromDate, setFromDate] = useState(yesterdayDefault)
-  const [toDate, setToDate] = useState(yesterdayDefault)
+  const [selectedDate, setSelectedDate] = useState(defaultDate)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [loading, setLoading] = useState(true)
 
   const [summary, setSummary] = useState({
-    fromDate: yesterdayDefault,
-    toDate: yesterdayDefault,
+    selectedDate: defaultDate,
+    fromDate: defaultDate,
+    toDate: defaultDate,
     yesterdayCount: 0,
     totalBrandsTillDate: 0,
   })
 
-  const [yesterdayBrands, setYesterdayBrands] = useState<YesterdayBrand[]>([])
+  const [dailyBrands, setDailyBrands] = useState<DailyBrand[]>([])
   const [allBrands, setAllBrands] = useState<AllBrand[]>([])
 
-  async function loadData(currentFrom = fromDate, currentTo = toDate, currentSearch = search) {
+  async function loadData(currentDate = selectedDate, currentSearch = search) {
     try {
       setLoading(true)
 
       const params = new URLSearchParams()
-      if (currentFrom) params.set('from', currentFrom)
-      if (currentTo) params.set('to', currentTo)
+      if (currentDate) params.set('date', currentDate)
       if (currentSearch.trim()) params.set('search', currentSearch.trim())
 
       const res = await fetch(`/api/onboarded-brands?${params.toString()}`, {
@@ -72,17 +73,23 @@ export default function OnboardedBrandsPage() {
 
       if (!res.ok || !data.success) {
         console.error('Onboarded brands API error:', data)
-        setYesterdayBrands([])
+        setDailyBrands([])
         setAllBrands([])
         return
       }
 
-      setSummary(data.summary)
-      setYesterdayBrands(data.yesterdayBrands || [])
+      setSummary({
+        selectedDate: data.summary.selectedDate || data.summary.fromDate,
+        fromDate: data.summary.fromDate,
+        toDate: data.summary.toDate,
+        yesterdayCount: data.summary.yesterdayCount,
+        totalBrandsTillDate: data.summary.totalBrandsTillDate,
+      })
+      setDailyBrands(data.yesterdayBrands || [])
       setAllBrands(data.allBrands || [])
     } catch (error) {
       console.error('Failed to load onboarded brands', error)
-      setYesterdayBrands([])
+      setDailyBrands([])
       setAllBrands([])
     } finally {
       setLoading(false)
@@ -90,32 +97,30 @@ export default function OnboardedBrandsPage() {
   }
 
   useEffect(() => {
-    loadData(fromDate, toDate, search)
+    loadData(selectedDate, search)
   }, [])
 
   function applyFilters() {
-    loadData(fromDate, toDate, search)
+    setSearch(searchInput)
+    loadData(selectedDate, searchInput)
   }
 
   function resetFilters() {
-    const y = getDefaultYesterday()
-    setFromDate(y)
-    setToDate(y)
+    const y = getDefaultYesterdayIST()
+    setSelectedDate(y)
     setSearch('')
     setSearchInput('')
-    loadData(y, y, '')
+    loadData(y, '')
   }
 
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setSearch(searchInput)
-    loadData(fromDate, toDate, searchInput)
+    applyFilters()
   }
 
-  function downloadRangeCsv() {
+  function downloadDailyCsv() {
     const params = new URLSearchParams()
-    if (fromDate) params.set('from', fromDate)
-    if (toDate) params.set('to', toDate)
+    if (selectedDate) params.set('date', selectedDate)
     if (search.trim()) params.set('search', search.trim())
     window.open(`/api/onboarded-brands/export?type=range&${params.toString()}`, '_blank')
   }
@@ -133,32 +138,20 @@ export default function OnboardedBrandsPage() {
           Onboarded Brands
         </h1>
         <p className="mt-1 sm:mt-2 text-sm text-slate-500">
-          Filter brands by date range and download the exact result
+          Select one day to see brands newly onboarded on that day
         </p>
       </div>
 
       <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[180px_180px_minmax(0,1fr)_auto_auto_auto]">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[220px_minmax(0,1fr)_auto_auto_auto]">
           <div>
             <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              From Date
+              Onboarded Date
             </label>
             <input
               type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              To Date
-            </label>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
               className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
             />
           </div>
@@ -181,7 +174,7 @@ export default function OnboardedBrandsPage() {
               onClick={applyFilters}
               className="inline-flex h-11 w-full items-center justify-center rounded-2xl bg-slate-900 px-5 text-sm font-medium text-white transition hover:bg-slate-800"
             >
-              Apply Filter
+              Apply
             </button>
           </div>
 
@@ -196,7 +189,7 @@ export default function OnboardedBrandsPage() {
 
           <div className="flex items-end">
             <button
-              onClick={downloadRangeCsv}
+              onClick={downloadDailyCsv}
               className="inline-flex h-11 w-full items-center justify-center rounded-2xl bg-emerald-600 px-5 text-sm font-medium text-white transition hover:bg-emerald-700"
             >
               Download CSV
@@ -208,14 +201,12 @@ export default function OnboardedBrandsPage() {
       <div className="grid grid-cols-2 gap-3 sm:gap-4">
         <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
           <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Brands in Selected Date Range
+            Brands Onboarded On Selected Day
           </div>
           <div className="mt-1 sm:mt-2 text-2xl sm:text-4xl font-semibold text-emerald-600">
             {summary.yesterdayCount}
           </div>
-          <div className="mt-1 text-sm text-slate-500">
-            {summary.fromDate} to {summary.toDate}
-          </div>
+          <div className="mt-1 text-sm text-slate-500">{summary.selectedDate}</div>
         </div>
 
         <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
@@ -240,9 +231,9 @@ export default function OnboardedBrandsPage() {
       </div>
 
       <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900">Brands in Selected Date Range</h2>
+        <h2 className="text-xl font-semibold text-slate-900">Brands Onboarded On Selected Day</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Based on activity log entries moved to Converted in the selected period
+          This table shows only brands whose status changed to Converted on the selected day.
         </p>
 
         <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
@@ -255,12 +246,12 @@ export default function OnboardedBrandsPage() {
 
           {loading ? (
             <div className="px-4 py-10 text-sm text-slate-500">Loading...</div>
-          ) : yesterdayBrands.length === 0 ? (
-            <div className="px-4 py-10 text-sm text-slate-500">No brands found for selected date range.</div>
+          ) : dailyBrands.length === 0 ? (
+            <div className="px-4 py-10 text-sm text-slate-500">No brands onboarded on this day.</div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {yesterdayBrands.map((brand, idx) => (
-                <div key={`${brand.brand_name}-${idx}`} className="grid grid-cols-4 gap-4 px-4 py-4 text-sm">
+              {dailyBrands.map((brand, idx) => (
+                <div key={`${brand.brand_name}-${brand.source_sheet}-${idx}`} className="grid grid-cols-4 gap-4 px-4 py-4 text-sm">
                   <div className="font-medium text-slate-900">{brand.brand_name}</div>
                   <div className="text-slate-600">{brand.converted_at_label}</div>
                   <div className="text-slate-600">{brand.changed_by}</div>
@@ -274,9 +265,7 @@ export default function OnboardedBrandsPage() {
 
       <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-900">All Onboarded Brands Till Date</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          All brands currently marked as Converted
-        </p>
+        <p className="mt-1 text-sm text-slate-500">All brands currently marked as Converted</p>
 
         <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
           <div className="grid grid-cols-4 gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -293,7 +282,7 @@ export default function OnboardedBrandsPage() {
           ) : (
             <div className="divide-y divide-slate-100">
               {allBrands.map((brand, idx) => (
-                <div key={`${brand.brand_name}-${idx}`} className="grid grid-cols-4 gap-4 px-4 py-4 text-sm">
+                <div key={`${brand.brand_name}-${brand.source_sheet}-${idx}`} className="grid grid-cols-4 gap-4 px-4 py-4 text-sm">
                   <div className="font-medium text-slate-900">{brand.brand_name}</div>
                   <div className="text-slate-600">{brand.assigned_to}</div>
                   <div className="text-slate-600">{brand.source_sheet}</div>
