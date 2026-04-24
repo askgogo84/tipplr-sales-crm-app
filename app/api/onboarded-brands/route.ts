@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { fetchAllActiveRestaurants, normalizeStatus } from '@/lib/crm-metrics'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,11 +39,6 @@ function formatDateTimeIST(value: string | null) {
     minute: '2-digit',
     hour12: true,
   })
-}
-
-function isConverted(row: any) {
-  const status = String(row.lead_status || '').trim().toLowerCase()
-  return status === 'converted' || row.converted === true
 }
 
 function matchesSearch(values: unknown[], search: string) {
@@ -106,23 +102,13 @@ export async function GET(req: NextRequest) {
         )
     )
 
-    // Fetch master converted list without PostgREST OR filters.
-    // This is more stable because the CRM has mixed data: lead_status and converted boolean.
-    const { data: allRestaurantRows, error: allRowsError } = await supabase
-      .from('restaurants')
-      .select('restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted')
-      .order('updated_at', { ascending: false })
-      .limit(10000)
-
-    if (allRowsError) {
-      return NextResponse.json(
-        { success: false, error: allRowsError.message },
-        { status: 500 }
-      )
-    }
+    const allRestaurantRows = await fetchAllActiveRestaurants(
+      supabase,
+      'id, restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted, is_deactivated'
+    )
 
     const allBrands = (allRestaurantRows || [])
-      .filter(isConverted)
+      .filter((row: any) => normalizeStatus(row.lead_status, row.converted) === 'converted')
       .map((row: any) => ({
         brand_name: row.restaurant_name || '—',
         assigned_to: row.assigned_to_name || 'Unassigned',
