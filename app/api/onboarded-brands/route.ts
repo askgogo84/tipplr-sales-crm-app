@@ -2,21 +2,41 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { google } from 'googleapis'
 import { fetchAllActiveRestaurants, normalizeStatus } from '@/lib/crm-metrics'
+
+const ONBOARDED_LOG_SHEET = 'Merchant Logs History'
 
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-  if (!supabaseUrl) {
-    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
-  }
-
-  if (!serviceRoleKey) {
-    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
-  }
+  if (!supabaseUrl) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
+  if (!serviceRoleKey) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
 
   return createClient(supabaseUrl, serviceRoleKey)
+}
+
+function getGoogleCredentials() {
+  const envJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+  if (!envJson) throw new Error('Missing GOOGLE_SERVICE_ACCOUNT_JSON')
+
+  try {
+    return JSON.parse(envJson)
+  } catch {
+    throw new Error('Invalid GOOGLE_SERVICE_ACCOUNT_JSON format')
+  }
+}
+
+async function getGoogleSheetsClient() {
+  if (!process.env.GOOGLE_SHEET_ID) throw new Error('Missing GOOGLE_SHEET_ID')
+
+  const auth = new google.auth.GoogleAuth({
+    credentials: getGoogleCredentials(),
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+  })
+
+  return google.sheets({ version: 'v4', auth })
 }
 
 function getISTDateString(date = new Date()) {
@@ -28,6 +48,11 @@ function getDefaultYesterdayIST() {
   const istDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
   istDate.setDate(istDate.getDate() - 1)
   return getISTDateString(istDate)
+}
+
+function excelSerialToDateString(value: number) {
+  const utc = Date.UTC(1899, 11, 30) + value * 24 * 60 * 60 * 1000
+  return new Date(utc).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
 
 function formatDateTimeIST(value: string | null) {
@@ -55,8 +80,17 @@ function formatDateLabel(dateStr: string) {
 function normalizeSheetDate(value: unknown): string | null {
   if (value === null || value === undefined) return null
 
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return excelSerialToDateString(value)
+  }
+
   const raw = String(value).trim()
   if (!raw) return null
+
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    const asNumber = Number(raw)
+    if (asNumber > 25000 && asNumber < 80000) return excelSerialToDateString(asNumber)
+  }
 
   const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
   if (isoMatch) {
@@ -81,17 +115,20 @@ function normalizeSheetDate(value: unknown): string | null {
 
 function matchesSearch(values: unknown[], search: string) {
   if (!search) return true
-  return values
-    .filter(Boolean)
-    .some((v) => String(v).toLowerCase().includes(search))
+  return values.filter(Boolean).some((v) => String(v).toLowerCase().includes(search))
 }
 
-function uniqueByBrandAndSheet(rows: any[]) {
+function uniqueByBrandDateAndExecutive(rows: any[]) {
   const seen = new Set<string>()
   const unique: any[] = []
 
   for (const row of rows) {
-    const key = `${String(row.brand_name || '').toLowerCase()}::${String(row.source_sheet || '').toLowerCase()}`
+    const key = [
+      String(row.brand_name || '').trim().toLowerCase(),
+      String(row.converted_at || '').trim().toLowerCase(),
+      String(row.changed_by || '').trim().toLowerCase(),
+    ].join('::')
+
     if (seen.has(key)) continue
     seen.add(key)
     unique.push(row)
@@ -100,38 +137,66 @@ function uniqueByBrandAndSheet(rows: any[]) {
   return unique
 }
 
+async function fetchOnboardedLogRows() {
+  const sheets = await getGoogleSheetsClient()
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID!
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${ONBOARDED_LOG_SHEET}'!A:D`,
+    valueRenderOption: 'UNFORMATTED_VALUE',
+    dateTimeRenderOption: 'SERIAL_NUMBER',
+  })
+
+  const rows = response.data.values || []
+  const dataRows = rows.slice(1)
+
+  return dataRows
+    .map((row: any[]) => {
+      const date = normalizeSheetDate(row[1])
+      const brand = String(row[2] || '').trim()
+      const executive = String(row[3] || '').trim()
+
+      if (!date || !brand) return null
+
+      return {
+        brand_name: brand,
+        converted_at: date,
+        converted_at_label: formatDateLabel(date),
+        changed_by: executive || '—',
+        source_sheet: ONBOARDED_LOG_SHEET,
+      }
+    })
+    .filter(Boolean) as any[]
+}
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(req.url)
-    const requestedDate =
-      (searchParams.get('date') || searchParams.get('from') || '').trim()
+    const requestedDate = (searchParams.get('date') || searchParams.get('from') || '').trim()
     const search = (searchParams.get('search') || '').trim().toLowerCase()
 
     const selectedDate = requestedDate || getDefaultYesterdayIST()
 
-    const allRestaurantRows = await fetchAllActiveRestaurants(
-      supabase,
-      'id, restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted, is_deactivated, go_live_date'
+    const [onboardedLogRows, allRestaurantRows] = await Promise.all([
+      fetchOnboardedLogRows(),
+      fetchAllActiveRestaurants(
+        supabase,
+        'id, restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted, is_deactivated, go_live_date'
+      ),
+    ])
+
+    const dailyBrands = uniqueByBrandDateAndExecutive(
+      onboardedLogRows
+        .filter((row: any) => row.converted_at === selectedDate)
+        .filter((row: any) =>
+          matchesSearch([row.brand_name, row.changed_by, row.source_sheet], search)
+        )
     )
 
     const convertedRows = (allRestaurantRows || []).filter(
       (row: any) => normalizeStatus(row.lead_status, row.converted) === 'converted'
-    )
-
-    const dailyBrands = uniqueByBrandAndSheet(
-      convertedRows
-        .filter((row: any) => normalizeSheetDate(row.go_live_date) === selectedDate)
-        .map((row: any) => ({
-          brand_name: row.restaurant_name || '—',
-          converted_at: normalizeSheetDate(row.go_live_date) || selectedDate,
-          converted_at_label: formatDateLabel(normalizeSheetDate(row.go_live_date) || selectedDate),
-          changed_by: row.assigned_to_name || 'Sheet Sync',
-          source_sheet: row.source_sheet || '—',
-        }))
-        .filter((row: any) =>
-          matchesSearch([row.brand_name, row.changed_by, row.source_sheet], search)
-        )
     )
 
     const allBrands = convertedRows
@@ -157,6 +222,7 @@ export async function GET(req: NextRequest) {
       },
       yesterdayBrands: dailyBrands,
       allBrands,
+      source: ONBOARDED_LOG_SHEET,
     })
   } catch (error) {
     return NextResponse.json(
