@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { fetchAllActiveRestaurants, normalizeStatus } from '@/lib/crm-metrics'
 
 type RawRow = { date: string; restaurant: string; executive: string }
 type OnboardedRow = {
@@ -11,7 +13,8 @@ type OnboardedRow = {
   source_sheet: string
 }
 
-const SOURCE_NAME = 'Outlet count as on 22 23 24 April'
+const DAILY_SOURCE_NAME = 'Outlet count as on 22 23 24 April'
+const TOTAL_SOURCE_NAME = 'CRM Converted Restaurants'
 
 const ROWS: RawRow[] = [
   ['2026-04-22', 'Kayalum Kadalum', 'Bareen'],
@@ -87,6 +90,16 @@ const ROWS: RawRow[] = [
   ['2026-04-24', 'Yakshee Cafe', 'Bareen'],
 ].map(([date, restaurant, executive]) => ({ date, restaurant, executive }))
 
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
+  if (!serviceRoleKey) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
+
+  return createClient(supabaseUrl, serviceRoleKey)
+}
+
 function getDefaultYesterdayIST() {
   const now = new Date()
   const istDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
@@ -103,52 +116,86 @@ function formatDateLabel(dateStr: string) {
   })
 }
 
+function formatDateTimeIST(value: string | null) {
+  if (!value) return '—'
+  return new Date(value).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+}
+
 function matchesSearch(values: unknown[], search: string) {
   if (!search) return true
   return values.filter(Boolean).some((v) => String(v).toLowerCase().includes(search))
 }
 
-function buildRows(): OnboardedRow[] {
+function buildDailyRows(): OnboardedRow[] {
   return ROWS.map((row) => ({
     brand_name: row.restaurant,
     converted_at: row.date,
     converted_at_label: formatDateLabel(row.date),
     changed_by: row.executive,
-    source_sheet: SOURCE_NAME,
+    source_sheet: DAILY_SOURCE_NAME,
   }))
 }
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const selectedDate = (searchParams.get('date') || searchParams.get('from') || getDefaultYesterdayIST()).trim()
-  const search = (searchParams.get('search') || '').trim().toLowerCase()
+async function buildTotalRows(search: string) {
+  const supabase = getSupabaseAdmin()
+  const rows = await fetchAllActiveRestaurants(
+    supabase,
+    'id, restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted, is_deactivated'
+  )
 
-  const rows = buildRows()
-  const allBrands = rows
-    .map((row) => ({
-      brand_name: row.brand_name,
-      assigned_to: row.changed_by,
-      source_sheet: row.source_sheet,
-      last_updated: row.converted_at,
-      last_updated_label: row.converted_at_label,
+  return (rows || [])
+    .filter((row: any) => normalizeStatus(row.lead_status, row.converted) === 'converted')
+    .map((row: any) => ({
+      brand_name: row.restaurant_name || '—',
+      assigned_to: row.assigned_to_name || 'Unassigned',
+      source_sheet: row.source_sheet || TOTAL_SOURCE_NAME,
+      last_updated: row.updated_at || row.synced_at || null,
+      last_updated_label: formatDateTimeIST(row.updated_at || row.synced_at || null),
     }))
-    .filter((row) => matchesSearch([row.brand_name, row.assigned_to, row.source_sheet], search))
+    .filter((row: any) => matchesSearch([row.brand_name, row.assigned_to, row.source_sheet], search))
+}
 
-  const dailyBrands = rows
-    .filter((row) => row.converted_at === selectedDate)
-    .filter((row) => matchesSearch([row.brand_name, row.changed_by, row.source_sheet], search))
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const selectedDate = (searchParams.get('date') || searchParams.get('from') || getDefaultYesterdayIST()).trim()
+    const search = (searchParams.get('search') || '').trim().toLowerCase()
 
-  return NextResponse.json({
-    success: true,
-    summary: {
-      selectedDate,
-      fromDate: selectedDate,
-      toDate: selectedDate,
-      yesterdayCount: dailyBrands.length,
-      totalBrandsTillDate: allBrands.length,
-    },
-    yesterdayBrands: dailyBrands,
-    allBrands,
-    source: SOURCE_NAME,
-  })
+    const dailyRows = buildDailyRows()
+    const dailyBrands = dailyRows
+      .filter((row) => row.converted_at === selectedDate)
+      .filter((row) => matchesSearch([row.brand_name, row.changed_by, row.source_sheet], search))
+
+    const allBrands = await buildTotalRows(search)
+
+    return NextResponse.json({
+      success: true,
+      summary: {
+        selectedDate,
+        fromDate: selectedDate,
+        toDate: selectedDate,
+        yesterdayCount: dailyBrands.length,
+        totalBrandsTillDate: allBrands.length,
+      },
+      yesterdayBrands: dailyBrands,
+      allBrands,
+      source: `${DAILY_SOURCE_NAME} for daily count; ${TOTAL_SOURCE_NAME} for total`,
+    })
+  } catch (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+      { status: 500 }
+    )
+  }
 }
