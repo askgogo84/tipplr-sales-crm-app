@@ -1,20 +1,16 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { google } from 'googleapis'
-import { fetchAllActiveRestaurants, normalizeStatus } from '@/lib/crm-metrics'
 
-const ONBOARDED_LOG_SHEET = 'Merchant Logs History'
+const PREFERRED_LOG_SHEET = 'Merchant Logs History'
 
-function getSupabaseAdmin() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
-  if (!serviceRoleKey) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
-
-  return createClient(supabaseUrl, serviceRoleKey)
+type OnboardedRow = {
+  brand_name: string
+  converted_at: string
+  converted_at_label: string
+  changed_by: string
+  source_sheet: string
 }
 
 function getGoogleCredentials() {
@@ -39,6 +35,10 @@ async function getGoogleSheetsClient() {
   return google.sheets({ version: 'v4', auth })
 }
 
+function quoteSheetName(title: string) {
+  return `'${title.replace(/'/g, "''")}'!A:Z`
+}
+
 function getISTDateString(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
@@ -53,19 +53,6 @@ function getDefaultYesterdayIST() {
 function excelSerialToDateString(value: number) {
   const utc = Date.UTC(1899, 11, 30) + value * 24 * 60 * 60 * 1000
   return new Date(utc).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-}
-
-function formatDateTimeIST(value: string | null) {
-  if (!value) return '—'
-  return new Date(value).toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  })
 }
 
 function formatDateLabel(dateStr: string) {
@@ -113,20 +100,33 @@ function normalizeSheetDate(value: unknown): string | null {
   return null
 }
 
+function normalizeHeader(value: unknown) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
+function findHeaderIndex(headers: string[], candidates: string[]) {
+  return headers.findIndex((header) =>
+    candidates.some((candidate) => header === candidate || header.includes(candidate))
+  )
+}
+
 function matchesSearch(values: unknown[], search: string) {
   if (!search) return true
   return values.filter(Boolean).some((v) => String(v).toLowerCase().includes(search))
 }
 
-function uniqueByBrandDateAndExecutive(rows: any[]) {
+function uniqueRows(rows: OnboardedRow[]) {
   const seen = new Set<string>()
-  const unique: any[] = []
+  const unique: OnboardedRow[] = []
 
   for (const row of rows) {
     const key = [
-      String(row.brand_name || '').trim().toLowerCase(),
-      String(row.converted_at || '').trim().toLowerCase(),
-      String(row.changed_by || '').trim().toLowerCase(),
+      row.brand_name.trim().toLowerCase(),
+      row.converted_at,
+      row.changed_by.trim().toLowerCase(),
     ].join('::')
 
     if (seen.has(key)) continue
@@ -137,25 +137,45 @@ function uniqueByBrandDateAndExecutive(rows: any[]) {
   return unique
 }
 
-async function fetchOnboardedLogRows() {
-  const sheets = await getGoogleSheetsClient()
-  const spreadsheetId = process.env.GOOGLE_SHEET_ID!
+function parseRowsFromSheet(title: string, rows: any[][]): OnboardedRow[] {
+  if (!rows.length) return []
 
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: `'${ONBOARDED_LOG_SHEET}'!A:D`,
-    valueRenderOption: 'UNFORMATTED_VALUE',
-    dateTimeRenderOption: 'SERIAL_NUMBER',
-  })
+  let headerRowIndex = -1
+  let dateIdx = -1
+  let brandIdx = -1
+  let executiveIdx = -1
 
-  const rows = response.data.values || []
-  const dataRows = rows.slice(1)
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const headers = (rows[i] || []).map(normalizeHeader)
+
+    const dIdx = findHeaderIndex(headers, ['date', 'onboarded date', 'go live date'])
+    const bIdx = findHeaderIndex(headers, ['restaurant', 'brand', 'brand name', 'restaurant name', 'outlet'])
+    const eIdx = findHeaderIndex(headers, ['executives', 'executive', 'assigned to', 'assigned_to', 'called by'])
+
+    if (dIdx >= 0 && bIdx >= 0) {
+      headerRowIndex = i
+      dateIdx = dIdx
+      brandIdx = bIdx
+      executiveIdx = eIdx
+      break
+    }
+  }
+
+  // Fallback for the exact uploaded format: SL NO | Date | Restaurant | Executives
+  if (headerRowIndex < 0) {
+    headerRowIndex = 0
+    dateIdx = 1
+    brandIdx = 2
+    executiveIdx = 3
+  }
+
+  const dataRows = rows.slice(headerRowIndex + 1)
 
   return dataRows
     .map((row: any[]) => {
-      const date = normalizeSheetDate(row[1])
-      const brand = String(row[2] || '').trim()
-      const executive = String(row[3] || '').trim()
+      const date = normalizeSheetDate(row[dateIdx])
+      const brand = String(row[brandIdx] || '').trim()
+      const executive = executiveIdx >= 0 ? String(row[executiveIdx] || '').trim() : ''
 
       if (!date || !brand) return null
 
@@ -164,52 +184,102 @@ async function fetchOnboardedLogRows() {
         converted_at: date,
         converted_at_label: formatDateLabel(date),
         changed_by: executive || '—',
-        source_sheet: ONBOARDED_LOG_SHEET,
+        source_sheet: title,
       }
     })
-    .filter(Boolean) as any[]
+    .filter(Boolean) as OnboardedRow[]
+}
+
+async function fetchOnboardedLogRows() {
+  const sheets = await getGoogleSheetsClient()
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID!
+
+  const meta = await sheets.spreadsheets.get({ spreadsheetId })
+  const titles = (meta.data.sheets || [])
+    .map((sheet) => sheet.properties?.title)
+    .filter(Boolean) as string[]
+
+  const preferred = titles.find(
+    (title) => title.trim().toLowerCase() === PREFERRED_LOG_SHEET.toLowerCase()
+  )
+
+  const candidates = preferred
+    ? [preferred]
+    : titles.filter((title) => {
+        const t = title.toLowerCase()
+        return (
+          t.includes('merchant') ||
+          t.includes('log') ||
+          t.includes('onboard') ||
+          t.includes('outlet count') ||
+          t.includes('history')
+        )
+      })
+
+  const sheetsToCheck = candidates.length ? candidates : titles
+  let parsedRows: OnboardedRow[] = []
+  let usedSheet = preferred || sheetsToCheck[0] || PREFERRED_LOG_SHEET
+  const errors: string[] = []
+
+  for (const title of sheetsToCheck) {
+    try {
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: quoteSheetName(title),
+        valueRenderOption: 'UNFORMATTED_VALUE',
+        dateTimeRenderOption: 'SERIAL_NUMBER',
+      })
+
+      const rows = response.data.values || []
+      const parsed = parseRowsFromSheet(title, rows)
+
+      if (parsed.length > parsedRows.length) {
+        parsedRows = parsed
+        usedSheet = title
+      }
+
+      if (preferred) break
+    } catch (error) {
+      errors.push(`${title}: ${error instanceof Error ? error.message : 'Failed to read sheet'}`)
+    }
+  }
+
+  if (!parsedRows.length) {
+    throw new Error(
+      `No onboarded log rows found. Add a tab with columns: SL NO | Date | Restaurant | Executives. Available tabs: ${titles.join(', ')}${
+        errors.length ? `. Read errors: ${errors.join(' | ')}` : ''
+      }`
+    )
+  }
+
+  return {
+    source: usedSheet,
+    rows: uniqueRows(parsedRows),
+  }
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(req.url)
     const requestedDate = (searchParams.get('date') || searchParams.get('from') || '').trim()
     const search = (searchParams.get('search') || '').trim().toLowerCase()
 
     const selectedDate = requestedDate || getDefaultYesterdayIST()
+    const onboarded = await fetchOnboardedLogRows()
 
-    const [onboardedLogRows, allRestaurantRows] = await Promise.all([
-      fetchOnboardedLogRows(),
-      fetchAllActiveRestaurants(
-        supabase,
-        'id, restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted, is_deactivated, go_live_date'
-      ),
-    ])
-
-    const dailyBrands = uniqueByBrandDateAndExecutive(
-      onboardedLogRows
-        .filter((row: any) => row.converted_at === selectedDate)
-        .filter((row: any) =>
-          matchesSearch([row.brand_name, row.changed_by, row.source_sheet], search)
-        )
-    )
-
-    const convertedRows = (allRestaurantRows || []).filter(
-      (row: any) => normalizeStatus(row.lead_status, row.converted) === 'converted'
-    )
-
-    const allBrands = convertedRows
-      .map((row: any) => ({
-        brand_name: row.restaurant_name || '—',
-        assigned_to: row.assigned_to_name || 'Unassigned',
-        source_sheet: row.source_sheet || '—',
-        last_updated: row.updated_at || row.synced_at,
-        last_updated_label: formatDateTimeIST(row.updated_at || row.synced_at),
+    const allBrands = onboarded.rows
+      .map((row) => ({
+        brand_name: row.brand_name,
+        assigned_to: row.changed_by,
+        source_sheet: row.source_sheet,
+        last_updated: row.converted_at,
+        last_updated_label: row.converted_at_label,
       }))
-      .filter((row: any) =>
-        matchesSearch([row.brand_name, row.assigned_to, row.source_sheet], search)
-      )
+      .filter((row) => matchesSearch([row.brand_name, row.assigned_to, row.source_sheet], search))
+
+    const dailyBrands = onboarded.rows
+      .filter((row) => row.converted_at === selectedDate)
+      .filter((row) => matchesSearch([row.brand_name, row.changed_by, row.source_sheet], search))
 
     return NextResponse.json({
       success: true,
@@ -222,7 +292,7 @@ export async function GET(req: NextRequest) {
       },
       yesterdayBrands: dailyBrands,
       allBrands,
-      source: ONBOARDED_LOG_SHEET,
+      source: onboarded.source,
     })
   } catch (error) {
     return NextResponse.json(
