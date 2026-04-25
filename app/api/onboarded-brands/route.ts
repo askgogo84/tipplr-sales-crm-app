@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { google } from 'googleapis'
 
+const ONBOARDED_LOG_GID = 964452752
 const PREFERRED_LOG_SHEET = 'Merchant Logs History'
 
 type OnboardedRow = {
@@ -145,12 +146,12 @@ function parseRowsFromSheet(title: string, rows: any[][]): OnboardedRow[] {
   let brandIdx = -1
   let executiveIdx = -1
 
-  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
     const headers = (rows[i] || []).map(normalizeHeader)
 
     const dIdx = findHeaderIndex(headers, ['date', 'onboarded date', 'go live date'])
     const bIdx = findHeaderIndex(headers, ['restaurant', 'brand', 'brand name', 'restaurant name', 'outlet'])
-    const eIdx = findHeaderIndex(headers, ['executives', 'executive', 'assigned to', 'assigned_to', 'called by'])
+    const eIdx = findHeaderIndex(headers, ['executives', 'executive', 'assigned to', 'assigned_to', 'called by', 'tipplr executive'])
 
     if (dIdx >= 0 && bIdx >= 0) {
       headerRowIndex = i
@@ -161,7 +162,6 @@ function parseRowsFromSheet(title: string, rows: any[][]): OnboardedRow[] {
     }
   }
 
-  // Fallback for the exact uploaded format: SL NO | Date | Restaurant | Executives
   if (headerRowIndex < 0) {
     headerRowIndex = 0
     dateIdx = 1
@@ -190,55 +190,70 @@ function parseRowsFromSheet(title: string, rows: any[][]): OnboardedRow[] {
     .filter(Boolean) as OnboardedRow[]
 }
 
+async function readRowsFromSheetTitle(sheets: any, spreadsheetId: string, title: string) {
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: quoteSheetName(title),
+    valueRenderOption: 'UNFORMATTED_VALUE',
+    dateTimeRenderOption: 'SERIAL_NUMBER',
+  })
+
+  return response.data.values || []
+}
+
 async function fetchOnboardedLogRows() {
   const sheets = await getGoogleSheetsClient()
   const spreadsheetId = process.env.GOOGLE_SHEET_ID!
 
   const meta = await sheets.spreadsheets.get({ spreadsheetId })
-  const titles = (meta.data.sheets || [])
+  const allSheets = meta.data.sheets || []
+  const titles = allSheets
     .map((sheet) => sheet.properties?.title)
     .filter(Boolean) as string[]
 
-  const preferred = titles.find(
+  const gidSheet = allSheets.find((sheet) => sheet.properties?.sheetId === ONBOARDED_LOG_GID)
+  const gidTitle = gidSheet?.properties?.title
+
+  const preferredTitle = titles.find(
     (title) => title.trim().toLowerCase() === PREFERRED_LOG_SHEET.toLowerCase()
   )
 
-  const candidates = preferred
-    ? [preferred]
-    : titles.filter((title) => {
-        const t = title.toLowerCase()
-        return (
-          t.includes('merchant') ||
-          t.includes('log') ||
-          t.includes('onboard') ||
-          t.includes('outlet count') ||
-          t.includes('history')
-        )
-      })
+  const candidates = [
+    gidTitle,
+    preferredTitle,
+    ...titles.filter((title) => {
+      const t = title.toLowerCase()
+      return (
+        t.includes('merchant') ||
+        t.includes('log') ||
+        t.includes('onboard') ||
+        t.includes('outlet count') ||
+        t.includes('history')
+      )
+    }),
+  ].filter(Boolean) as string[]
 
-  const sheetsToCheck = candidates.length ? candidates : titles
+  const uniqueCandidates = Array.from(new Set(candidates))
+  const sheetsToCheck = uniqueCandidates.length ? uniqueCandidates : titles
   let parsedRows: OnboardedRow[] = []
-  let usedSheet = preferred || sheetsToCheck[0] || PREFERRED_LOG_SHEET
+  let usedSheet = sheetsToCheck[0] || PREFERRED_LOG_SHEET
   const errors: string[] = []
 
   for (const title of sheetsToCheck) {
     try {
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: quoteSheetName(title),
-        valueRenderOption: 'UNFORMATTED_VALUE',
-        dateTimeRenderOption: 'SERIAL_NUMBER',
-      })
-
-      const rows = response.data.values || []
+      const rows = await readRowsFromSheetTitle(sheets, spreadsheetId, title)
       const parsed = parseRowsFromSheet(title, rows)
+
+      if (title === gidTitle && parsed.length > 0) {
+        parsedRows = parsed
+        usedSheet = title
+        break
+      }
 
       if (parsed.length > parsedRows.length) {
         parsedRows = parsed
         usedSheet = title
       }
-
-      if (preferred) break
     } catch (error) {
       errors.push(`${title}: ${error instanceof Error ? error.message : 'Failed to read sheet'}`)
     }
@@ -246,7 +261,7 @@ async function fetchOnboardedLogRows() {
 
   if (!parsedRows.length) {
     throw new Error(
-      `No onboarded log rows found. Add a tab with columns: SL NO | Date | Restaurant | Executives. Available tabs: ${titles.join(', ')}${
+      `No onboarded log rows found. Active linked tab gid=${ONBOARDED_LOG_GID}. Add/use a tab with columns: SL NO | Date | Restaurant | Executives. Available tabs: ${titles.join(', ')}${
         errors.length ? `. Read errors: ${errors.join(' | ')}` : ''
       }`
     )
