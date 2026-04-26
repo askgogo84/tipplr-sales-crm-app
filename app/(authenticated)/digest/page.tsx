@@ -60,18 +60,15 @@ export default async function DigestPage() {
 
     const { data: activities, error } = await supabase
       .from('restaurant_activity_log')
-      .select('restaurant_id, restaurant_name, source_sheet, old_status, new_status, changed_by, changed_at, created_at')
-      .or(`changed_at.gte.${todayStartIso},created_at.gte.${todayStartIso}`)
+      .select('restaurant_id, restaurant_name, source_sheet, old_status, new_status, changed_by, changed_at')
+      .gte('changed_at', todayStartIso)
+      .lte('changed_at', todayEndIso)
       .order('changed_at', { ascending: false })
       .limit(5000)
 
     if (error) throw new Error(error.message)
 
-    const rawRows = (activities || []).filter((row: any) => {
-      const timestamp = row.changed_at || row.created_at
-      if (!timestamp) return false
-      return timestamp >= todayStartIso && timestamp <= todayEndIso
-    })
+    const rawRows = activities || []
 
     const restaurantIds = Array.from(
       new Set(rawRows.map((row: any) => row.restaurant_id).filter(Boolean))
@@ -168,7 +165,7 @@ export default async function DigestPage() {
       executive: row.executive,
       status: row.status,
       source_sheet: row.source_sheet,
-      changed_at: row.changed_at || row.created_at,
+      changed_at: row.changed_at,
     }))
 
     const dateLabel = new Date().toLocaleDateString('en-IN', {
