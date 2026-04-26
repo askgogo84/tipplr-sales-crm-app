@@ -77,10 +77,7 @@ export default function OnboardedBrandsPage() {
       if (currentDate) params.set('date', currentDate)
       if (currentSearch.trim()) params.set('search', currentSearch.trim())
 
-      const res = await fetch(`/api/onboarded-brands?${params.toString()}`, {
-        cache: 'no-store',
-      })
-
+      const res = await fetch(`/api/onboarded-brands?${params.toString()}`, { cache: 'no-store' })
       const data: OnboardedApiResponse = await res.json()
 
       if (!res.ok || !data.success) {
@@ -150,7 +147,7 @@ export default function OnboardedBrandsPage() {
       <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6">
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Onboarded Brands</h1>
         <p className="mt-2 text-sm leading-6 text-slate-500">
-          Daily count uses verified onboarding reports. Total uses CRM converted restaurants.
+          Selected-day list shows only restaurant names from the verified onboarding report. Total uses CRM converted restaurants.
         </p>
       </div>
 
@@ -176,7 +173,7 @@ export default function OnboardedBrandsPage() {
             <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Search</label>
             <input
               type="text"
-              placeholder="Search brand or executive..."
+              placeholder="Search restaurant name..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
@@ -218,12 +215,11 @@ export default function OnboardedBrandsPage() {
             <div className="rounded-2xl border border-slate-200 px-4 py-8 text-sm text-slate-500">No brands onboarded on this day.</div>
           ) : (
             dailyBrands.map((brand, idx) => (
-              <div key={`${brand.brand_name}-${idx}`} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="text-base font-semibold leading-6 text-slate-900">{brand.brand_name}</div>
-                <div className="mt-3 grid grid-cols-1 gap-2">
-                  <DetailPill label="Date" value={brand.converted_at_label} />
-                  <DetailPill label="Executive" value={brand.changed_by} />
-                  <DetailPill label="Source" value={brand.source_sheet} />
+              <div key={`${brand.brand_name}-${idx}`} className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">{idx + 1}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="break-words text-base font-semibold leading-6 text-slate-900">{brand.brand_name}</div>
+                  <div className="mt-1 text-xs text-slate-500">{brand.converted_at_label}</div>
                 </div>
               </div>
             ))
@@ -231,13 +227,13 @@ export default function OnboardedBrandsPage() {
         </div>
 
         <div className="mt-5 hidden overflow-hidden rounded-2xl border border-slate-200 sm:block">
-          <div className="grid grid-cols-4 gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <div>Brand Name</div><div>Onboarded Date</div><div>Executive</div><div>Source</div>
+          <div className="grid grid-cols-[80px_1fr] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div>SL No</div><div>Restaurant Name</div>
           </div>
           {loading ? <div className="px-4 py-10 text-sm text-slate-500">Loading...</div> : dailyBrands.length === 0 ? <div className="px-4 py-10 text-sm text-slate-500">No brands onboarded on this day.</div> : (
             <div className="divide-y divide-slate-100">{dailyBrands.map((brand, idx) => (
-              <div key={`${brand.brand_name}-${brand.source_sheet}-${idx}`} className="grid grid-cols-4 gap-4 px-4 py-4 text-sm">
-                <div className="font-medium text-slate-900">{brand.brand_name}</div><div className="text-slate-600">{brand.converted_at_label}</div><div className="text-slate-600">{brand.changed_by}</div><div className="text-slate-600">{brand.source_sheet}</div>
+              <div key={`${brand.brand_name}-${brand.source_sheet}-${idx}`} className="grid grid-cols-[80px_1fr] gap-4 px-4 py-4 text-sm">
+                <div className="text-slate-500">{idx + 1}</div><div className="font-medium text-slate-900">{brand.brand_name}</div>
               </div>
             ))}</div>
           )}
