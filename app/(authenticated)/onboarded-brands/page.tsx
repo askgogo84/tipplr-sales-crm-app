@@ -40,6 +40,15 @@ function getDefaultYesterdayIST() {
   return istDate.toLocaleDateString('en-CA')
 }
 
+function DetailPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="mt-0.5 break-words text-sm font-medium text-slate-700">{value || '—'}</div>
+    </div>
+  )
+}
+
 export default function OnboardedBrandsPage() {
   const defaultDate = getDefaultYesterdayIST()
 
@@ -48,7 +57,7 @@ export default function OnboardedBrandsPage() {
   const [searchInput, setSearchInput] = useState('')
   const [loading, setLoading] = useState(true)
   const [errorText, setErrorText] = useState('')
-  const [sourceName, setSourceName] = useState('Merchant Logs History')
+  const [sourceName, setSourceName] = useState('Onboarding reports')
 
   const [summary, setSummary] = useState({
     selectedDate: defaultDate,
@@ -75,19 +84,14 @@ export default function OnboardedBrandsPage() {
       const data: OnboardedApiResponse = await res.json()
 
       if (!res.ok || !data.success) {
-        console.error('Onboarded brands API error:', data)
         setDailyBrands([])
         setAllBrands([])
-        setSummary({
-          selectedDate: currentDate,
-          yesterdayCount: 0,
-          totalBrandsTillDate: 0,
-        })
+        setSummary({ selectedDate: currentDate, yesterdayCount: 0, totalBrandsTillDate: 0 })
         setErrorText(data?.error || 'Could not load onboarded brands.')
         return
       }
 
-      setSourceName(data.source || 'Merchant Logs History')
+      setSourceName(data.source || 'Onboarding reports')
       setDailyBrands(data.yesterdayBrands || [])
       setAllBrands((data.allBrands || []).slice(0, 100))
       setSummary({
@@ -99,12 +103,8 @@ export default function OnboardedBrandsPage() {
       console.error('Failed to load onboarded brands', error)
       setDailyBrands([])
       setAllBrands([])
-      setSummary({
-        selectedDate: currentDate,
-        yesterdayCount: 0,
-        totalBrandsTillDate: 0,
-      })
-      setErrorText('Could not load onboarded brands. Please check the Merchant Logs History tab and redeploy if needed.')
+      setSummary({ selectedDate: currentDate, yesterdayCount: 0, totalBrandsTillDate: 0 })
+      setErrorText('Could not load onboarded brands. Please refresh once deployment completes.')
     } finally {
       setLoading(false)
     }
@@ -146,13 +146,11 @@ export default function OnboardedBrandsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
-        <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-slate-900">
-          Onboarded Brands
-        </h1>
-        <p className="mt-1 sm:mt-2 text-sm text-slate-500">
-          Source of truth: {sourceName}. Select one date to see that day’s onboarded brands.
+    <div className="space-y-4 sm:space-y-5">
+      <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Onboarded Brands</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-500">
+          Daily count uses verified onboarding reports. Total uses CRM converted restaurants.
         </p>
       </div>
 
@@ -162,12 +160,10 @@ export default function OnboardedBrandsPage() {
         </div>
       )}
 
-      <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
+      <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[220px_minmax(0,1fr)_auto_auto_auto]">
           <div>
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Onboarded Date
-            </label>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Onboarded Date</label>
             <input
               type="date"
               value={selectedDate}
@@ -177,9 +173,7 @@ export default function OnboardedBrandsPage() {
           </div>
 
           <form onSubmit={handleSearchSubmit}>
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Search
-            </label>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Search</label>
             <input
               type="text"
               placeholder="Search brand or executive..."
@@ -189,129 +183,100 @@ export default function OnboardedBrandsPage() {
             />
           </form>
 
-          <div className="flex items-end">
-            <button
-              onClick={applyFilters}
-              className="inline-flex h-11 w-full items-center justify-center rounded-2xl bg-slate-900 px-5 text-sm font-medium text-white transition hover:bg-slate-800"
-            >
-              Apply
-            </button>
-          </div>
-
-          <div className="flex items-end">
-            <button
-              onClick={resetFilters}
-              className="inline-flex h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              Reset
-            </button>
-          </div>
-
-          <div className="flex items-end">
-            <button
-              onClick={downloadDailyCsv}
-              className="inline-flex h-11 w-full items-center justify-center rounded-2xl bg-emerald-600 px-5 text-sm font-medium text-white transition hover:bg-emerald-700"
-            >
-              Download CSV
-            </button>
-          </div>
+          <div className="flex items-end"><button onClick={applyFilters} className="inline-flex h-11 w-full items-center justify-center rounded-2xl bg-slate-900 px-5 text-sm font-medium text-white transition hover:bg-slate-800">Apply</button></div>
+          <div className="flex items-end"><button onClick={resetFilters} className="inline-flex h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Reset</button></div>
+          <div className="flex items-end"><button onClick={downloadDailyCsv} className="inline-flex h-11 w-full items-center justify-center rounded-2xl bg-emerald-600 px-5 text-sm font-medium text-white transition hover:bg-emerald-700">Download CSV</button></div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4">
-        <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
-          <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Brands Onboarded On Selected Day
-          </div>
-          <div className="mt-1 sm:mt-2 text-2xl sm:text-4xl font-semibold text-emerald-600">
-            {summary.yesterdayCount}
-          </div>
-          <div className="mt-1 text-sm text-slate-500">{summary.selectedDate}</div>
+        <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs">Selected Day</div>
+          <div className="mt-1 text-3xl font-semibold text-emerald-600 sm:text-4xl">{summary.yesterdayCount}</div>
+          <div className="mt-1 text-xs text-slate-500 sm:text-sm">{summary.selectedDate}</div>
         </div>
 
-        <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
+        <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6">
+          <div className="flex h-full flex-col justify-between gap-3 sm:flex-row sm:items-start">
             <div>
-              <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Total Onboarded Brands Till Date
-              </div>
-              <div className="mt-1 sm:mt-2 text-2xl sm:text-4xl font-semibold text-slate-900">
-                {summary.totalBrandsTillDate}
-              </div>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs">Total Till Date</div>
+              <div className="mt-1 text-3xl font-semibold text-slate-900 sm:text-4xl">{summary.totalBrandsTillDate}</div>
             </div>
-
-            <button
-              onClick={downloadAllCsv}
-              className="inline-flex h-10 items-center justify-center rounded-2xl bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
-            >
-              Download All CSV
-            </button>
+            <button onClick={downloadAllCsv} className="inline-flex h-9 items-center justify-center rounded-2xl bg-slate-900 px-3 text-xs font-medium text-white transition hover:bg-slate-800 sm:h-10 sm:px-4 sm:text-sm">Download All CSV</button>
           </div>
         </div>
       </div>
 
-      <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
+      <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6">
         <h2 className="text-xl font-semibold text-slate-900">Brands Onboarded On Selected Day</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          This table reads from {sourceName}: Date, Restaurant and Executives.
-        </p>
+        <p className="mt-1 text-sm leading-6 text-slate-500">Source: {sourceName}</p>
 
-        <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
-          <div className="grid grid-cols-4 gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <div>Brand Name</div>
-            <div>Onboarded Date</div>
-            <div>Executive</div>
-            <div>Source</div>
-          </div>
-
+        <div className="mt-5 block space-y-3 sm:hidden">
           {loading ? (
-            <div className="px-4 py-10 text-sm text-slate-500">Loading...</div>
+            <div className="rounded-2xl border border-slate-200 px-4 py-8 text-sm text-slate-500">Loading...</div>
           ) : dailyBrands.length === 0 ? (
-            <div className="px-4 py-10 text-sm text-slate-500">No brands onboarded on this day.</div>
+            <div className="rounded-2xl border border-slate-200 px-4 py-8 text-sm text-slate-500">No brands onboarded on this day.</div>
           ) : (
-            <div className="divide-y divide-slate-100">
-              {dailyBrands.map((brand, idx) => (
-                <div key={`${brand.brand_name}-${brand.source_sheet}-${idx}`} className="grid grid-cols-4 gap-4 px-4 py-4 text-sm">
-                  <div className="font-medium text-slate-900">{brand.brand_name}</div>
-                  <div className="text-slate-600">{brand.converted_at_label}</div>
-                  <div className="text-slate-600">{brand.changed_by}</div>
-                  <div className="text-slate-600">{brand.source_sheet}</div>
+            dailyBrands.map((brand, idx) => (
+              <div key={`${brand.brand_name}-${idx}`} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="text-base font-semibold leading-6 text-slate-900">{brand.brand_name}</div>
+                <div className="mt-3 grid grid-cols-1 gap-2">
+                  <DetailPill label="Date" value={brand.converted_at_label} />
+                  <DetailPill label="Executive" value={brand.changed_by} />
+                  <DetailPill label="Source" value={brand.source_sheet} />
                 </div>
-              ))}
-            </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="mt-5 hidden overflow-hidden rounded-2xl border border-slate-200 sm:block">
+          <div className="grid grid-cols-4 gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div>Brand Name</div><div>Onboarded Date</div><div>Executive</div><div>Source</div>
+          </div>
+          {loading ? <div className="px-4 py-10 text-sm text-slate-500">Loading...</div> : dailyBrands.length === 0 ? <div className="px-4 py-10 text-sm text-slate-500">No brands onboarded on this day.</div> : (
+            <div className="divide-y divide-slate-100">{dailyBrands.map((brand, idx) => (
+              <div key={`${brand.brand_name}-${brand.source_sheet}-${idx}`} className="grid grid-cols-4 gap-4 px-4 py-4 text-sm">
+                <div className="font-medium text-slate-900">{brand.brand_name}</div><div className="text-slate-600">{brand.converted_at_label}</div><div className="text-slate-600">{brand.changed_by}</div><div className="text-slate-600">{brand.source_sheet}</div>
+              </div>
+            ))}</div>
           )}
         </div>
       </div>
 
-      <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
+      <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6">
         <h2 className="text-xl font-semibold text-slate-900">All Onboarded Brands Till Date</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Showing first 100 logged onboarded brands from {sourceName}. Use Download All CSV for the full export.
-        </p>
+        <p className="mt-1 text-sm leading-6 text-slate-500">Showing first 100 converted brands from CRM. Use Download All CSV for the full export.</p>
 
-        <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
-          <div className="grid grid-cols-4 gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <div>Brand Name</div>
-            <div>Executive</div>
-            <div>Source</div>
-            <div>Onboarded Date</div>
-          </div>
-
+        <div className="mt-5 block space-y-3 sm:hidden">
           {loading ? (
-            <div className="px-4 py-10 text-sm text-slate-500">Loading...</div>
+            <div className="rounded-2xl border border-slate-200 px-4 py-8 text-sm text-slate-500">Loading...</div>
           ) : allBrands.length === 0 ? (
-            <div className="px-4 py-10 text-sm text-slate-500">No onboarded brands found.</div>
+            <div className="rounded-2xl border border-slate-200 px-4 py-8 text-sm text-slate-500">No onboarded brands found.</div>
           ) : (
-            <div className="divide-y divide-slate-100">
-              {allBrands.map((brand, idx) => (
-                <div key={`${brand.brand_name}-${brand.source_sheet}-${idx}`} className="grid grid-cols-4 gap-4 px-4 py-4 text-sm">
-                  <div className="font-medium text-slate-900">{brand.brand_name}</div>
-                  <div className="text-slate-600">{brand.assigned_to}</div>
-                  <div className="text-slate-600">{brand.source_sheet}</div>
-                  <div className="text-slate-600">{brand.last_updated_label}</div>
+            allBrands.map((brand, idx) => (
+              <div key={`${brand.brand_name}-${idx}`} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="text-base font-semibold leading-6 text-slate-900">{brand.brand_name}</div>
+                <div className="mt-3 grid grid-cols-1 gap-2">
+                  <DetailPill label="Executive" value={brand.assigned_to} />
+                  <DetailPill label="Source" value={brand.source_sheet} />
+                  <DetailPill label="Last Updated" value={brand.last_updated_label} />
                 </div>
-              ))}
-            </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="mt-5 hidden overflow-hidden rounded-2xl border border-slate-200 sm:block">
+          <div className="grid grid-cols-4 gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div>Brand Name</div><div>Executive</div><div>Source</div><div>Last Updated</div>
+          </div>
+          {loading ? <div className="px-4 py-10 text-sm text-slate-500">Loading...</div> : allBrands.length === 0 ? <div className="px-4 py-10 text-sm text-slate-500">No onboarded brands found.</div> : (
+            <div className="divide-y divide-slate-100">{allBrands.map((brand, idx) => (
+              <div key={`${brand.brand_name}-${brand.source_sheet}-${idx}`} className="grid grid-cols-4 gap-4 px-4 py-4 text-sm">
+                <div className="font-medium text-slate-900">{brand.brand_name}</div><div className="text-slate-600">{brand.assigned_to}</div><div className="text-slate-600">{brand.source_sheet}</div><div className="text-slate-600">{brand.last_updated_label}</div>
+              </div>
+            ))}</div>
           )}
         </div>
       </div>
