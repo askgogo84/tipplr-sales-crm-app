@@ -171,6 +171,13 @@ function endOfISTDayUtc(dateStr: string) {
   return new Date(`${dateStr}T23:59:59.999+05:30`).toISOString()
 }
 
+function isConvertedTransition(row: any) {
+  const oldStatus = String(row.old_status || '').trim().toLowerCase()
+  const newStatus = String(row.new_status || '').trim().toLowerCase()
+
+  return newStatus === 'converted' && oldStatus !== '' && oldStatus !== 'converted'
+}
+
 function matchesSearch(values: unknown[], search: string) {
   if (!search) return true
   return values.filter(Boolean).some((v) => String(v).toLowerCase().includes(search))
@@ -189,21 +196,22 @@ function buildHistoricalRows(): OnboardedRow[] {
 async function buildActivityRowsForDate(supabase: any, date: string): Promise<OnboardedRow[]> {
   const { data, error } = await supabase
     .from('restaurant_activity_log')
-    .select('restaurant_name, source_sheet, changed_by, new_status, changed_at')
-    .eq('new_status', 'Converted')
+    .select('restaurant_name, source_sheet, changed_by, old_status, new_status, changed_at')
     .gte('changed_at', startOfISTDayUtc(date))
     .lte('changed_at', endOfISTDayUtc(date))
     .order('changed_at', { ascending: false })
 
   if (error) throw new Error(error.message)
 
-  return (data || []).map((row: any) => ({
-    brand_name: row.restaurant_name || '—',
-    converted_at: date,
-    converted_at_label: formatDateLabel(date),
-    changed_by: row.changed_by || 'Sheet Sync',
-    source_sheet: row.source_sheet || ACTIVITY_SOURCE_NAME,
-  }))
+  return (data || [])
+    .filter(isConvertedTransition)
+    .map((row: any) => ({
+      brand_name: row.restaurant_name || '—',
+      converted_at: date,
+      converted_at_label: formatDateLabel(date),
+      changed_by: row.changed_by || 'Sheet Sync',
+      source_sheet: row.source_sheet || ACTIVITY_SOURCE_NAME,
+    }))
 }
 
 async function buildTotalRows(supabase: any, search: string) {
@@ -255,7 +263,7 @@ export async function GET(req: NextRequest) {
       allBrands,
       source: selectedDate <= HISTORICAL_END_DATE
         ? `${HISTORICAL_SOURCE_NAME} for selected-day history; ${TOTAL_SOURCE_NAME} for total`
-        : `${ACTIVITY_SOURCE_NAME} for selected day; ${TOTAL_SOURCE_NAME} for total`,
+        : `${ACTIVITY_SOURCE_NAME} converted transitions only; ${TOTAL_SOURCE_NAME} for total`,
     })
   } catch (error) {
     return NextResponse.json(
