@@ -54,8 +54,9 @@ export default function DigestClient({
     ? execStats.map((e) => `• *${e.name}:* ${e.converted} converted`)
     : ['• No restaurants converted today']
 
-  const restaurantLines = execStats.flatMap((e) =>
-    e.restaurants.map((restaurant) => `   - ${restaurant}`)
+  // Keep this list in the exact same order as the Onboarded Brands page.
+  const restaurantLines = recentActivities.map(
+    (row, index) => `${index + 1}. ${row.restaurant_name}${row.executive ? ` — ${row.executive}` : ''}`
   )
 
   const whatsappSummary = [
