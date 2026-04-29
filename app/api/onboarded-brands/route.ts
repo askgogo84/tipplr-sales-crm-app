@@ -13,160 +13,137 @@ type OnboardedRow = {
 }
 
 const HISTORICAL_SOURCE_NAME = 'Verified Daily Onboarding Report'
-const ACTIVITY_SOURCE_NAME = 'CRM Onboarded Date'
+const ACTIVITY_SOURCE_NAME = 'CRM Activity Log'
 const TOTAL_SOURCE_NAME = 'CRM Converted Restaurants'
-
-/**
- * Verified historical reports.
- * These dates were manually reconciled from the onboarding report screenshots/files.
- * Future dates should come from restaurants.onboarded_business_date.
- */
 const HISTORICAL_END_DATE = '2026-04-27'
 
-const HISTORICAL_ROWS: Record<string, { restaurant: string; executive?: string }[]> = {
-  '2026-04-22': [
-    { restaurant: 'Kayalum Kadalum', executive: 'Bareen' },
-    { restaurant: 'Bungalow 47', executive: 'Bareen' },
-    { restaurant: 'Al-Ansar Hotel', executive: 'Bareen' },
-    { restaurant: 'Fanoos Xpress Since 1975', executive: 'Bareen' },
-    { restaurant: 'Fanoos Xprss Since 1975', executive: 'Bareen' },
-    { restaurant: 'Sri Hari Khadya Bhandar', executive: 'Bareen' },
-    { restaurant: 'HOTEL FANOOS SINCE 1975', executive: 'Bareen' },
-    { restaurant: 'HOTEL FANOOS SINCE 1975', executive: 'Bareen' },
-    { restaurant: 'hotel aditya', executive: 'Shruthi' },
-    { restaurant: 'bist dhaba (2)', executive: 'Shruthi' },
-    { restaurant: 'bist dhaba (2)', executive: 'Shruthi' },
-    { restaurant: 'ahhar veg', executive: 'Shruthi' },
-    { restaurant: 'indian grill house', executive: 'Shruthi' },
-    { restaurant: 'sitara veg', executive: 'Shruthi' },
-    { restaurant: 'tandoori nights', executive: 'Shruthi' },
-    { restaurant: 'sai sagaar', executive: 'Shruthi' },
-    { restaurant: 'Ganesh Food Corner', executive: 'Keerthana' },
-    { restaurant: 'Big Wok Chinese', executive: 'Keerthana' },
-    { restaurant: 'A1 Delhi Dum Chicken Biryani', executive: 'Keerthana' },
-    { restaurant: 'The coffee House', executive: 'Lalitha' },
-    { restaurant: 'Attil Multi cuisine Restaurant', executive: 'Lalitha' },
-    { restaurant: 'Udupi Sagar', executive: 'Lalitha' },
-    { restaurant: "Crack'D Cafe", executive: 'Lalitha' },
-    { restaurant: 'Achayans Cafe 2.0', executive: 'Lalitha' },
-    { restaurant: 'Bazabi', executive: 'Lalitha' },
-    { restaurant: 'The Kerala Mess', executive: 'Lalitha' },
-    { restaurant: 'Sabari Juice Junction', executive: 'Neshavani' },
-    { restaurant: 'Kabab Mehal', executive: 'Neshavani' },
-    { restaurant: 'Kabab Mehak', executive: 'Neshavani' },
-    { restaurant: 'Kabab Street', executive: 'Neshavani' },
-    { restaurant: 'Pattanshetty Hotel', executive: 'Neshavani' },
-  ],
-
-  '2026-04-23': [
-    { restaurant: 'Hotel Baaduta', executive: 'Shruthi' },
-    { restaurant: 'Mizo Kitchen', executive: 'Shruthi' },
-    { restaurant: 'Mrs Iyengar kitchen', executive: 'Shruthi' },
-    { restaurant: 'shree guru sagar', executive: 'Shruthi' },
-    { restaurant: 'bhyrava biriyani', executive: 'Shruthi' },
-    { restaurant: 'Moms singh', executive: 'Shruthi' },
-    { restaurant: 'Star Biryani', executive: 'Keerthana' },
-    { restaurant: 'Board 4 Bored', executive: 'Keerthana' },
-    { restaurant: 'Jain bites', executive: 'Keerthana' },
-    { restaurant: 'Bowled over by Board 4 Bored', executive: 'Keerthana' },
-    { restaurant: '99 Variety Dosa And Pav Bhaji', executive: 'Keerthana' },
-    { restaurant: 'Five Star', executive: 'Keerthana' },
-    { restaurant: 'Sri Hari Khadya Bhandar', executive: 'Bareen' },
-    { restaurant: 'Delhi Flavour', executive: 'Bareen' },
-    { restaurant: 'Mysuru Thindiies [1]', executive: 'Bareen' },
-    { restaurant: 'Mysuru Thindiies [2]', executive: 'Bareen' },
-    { restaurant: 'New Darbar Family Restaurant', executive: 'Bareen' },
-    { restaurant: 'Jai Bhavani Hotel', executive: 'Bareen' },
-    { restaurant: 'Madurai Tiffin Center', executive: 'Bareen' },
-    { restaurant: 'The Benne Mane', executive: 'Lalitha' },
-    { restaurant: 'Dilli Bhature Chole', executive: 'Lalitha' },
-    { restaurant: 'Big Scoop cafe', executive: 'Lalitha' },
-    { restaurant: 'Desi Veg Cravings', executive: 'Lalitha' },
-    { restaurant: 'Devansh Momos Corner', executive: 'Lalitha' },
-  ],
-
-  '2026-04-24': [
-    { restaurant: 'sankalpa reddy Restaurant(1)', executive: 'Shruthi' },
-    { restaurant: 'sankalpa reddy Restaurant(2)', executive: 'Shruthi' },
-    { restaurant: 'sankalpa reddy Restaurant(3)', executive: 'Shruthi' },
-    { restaurant: 'sankalpa reddy Restaurant(4)', executive: 'Shruthi' },
-    { restaurant: 'Antarastriya momo pasta (1)', executive: 'Shruthi' },
-    { restaurant: 'Antarastriya momo pasta (2)', executive: 'Shruthi' },
-    { restaurant: 'Antarastriya momo pasta (3)', executive: 'Shruthi' },
-    { restaurant: 'Antarastriya momo pasta (4)', executive: 'Shruthi' },
-    { restaurant: 'shareat panipuri', executive: 'Shruthi' },
-    { restaurant: 'Cafe Corner', executive: 'Lalitha' },
-    { restaurant: 'Kavin Restaurant', executive: 'Lalitha' },
-    { restaurant: 'The Shades', executive: 'Lalitha' },
-    { restaurant: 'Bhojan Bhavan', executive: 'Lalitha' },
-    { restaurant: 'Hasanamba Iyengers Cake Mane', executive: 'Lalitha' },
-    { restaurant: 'Luv u Bhojan', executive: 'Lalitha' },
-    { restaurant: 'MBS Mandi House [1]', executive: 'Bareen' },
-    { restaurant: 'MBS Mandi House [2]', executive: 'Bareen' },
-    { restaurant: 'MBS Mandi House [3]', executive: 'Bareen' },
-    { restaurant: 'DirtyDogs [1]', executive: 'Bareen' },
-    { restaurant: 'DirtyDogs [2]', executive: 'Bareen' },
-    { restaurant: 'S M Bakery', executive: 'Bareen' },
-    { restaurant: 'Yakshee Cafe', executive: 'Bareen' },
-  ],
-
-  '2026-04-25': [
-    { restaurant: '24 Parganas' },
-    { restaurant: 'Ohhdaily - Healthy & Homely Tiffins [1]' },
-    { restaurant: 'Ohhdaily - Healthy & Homely Tiffins [2]' },
-    { restaurant: 'RR Chats [1]' },
-    { restaurant: 'RR Chats [2]' },
-    { restaurant: 'Naidu Hotel' },
-    { restaurant: 'Chakadola sweets' },
-    { restaurant: 'Meghana biriyani' },
-    { restaurant: "Dande's Biriyani" },
-    { restaurant: 'Regal Feast' },
-    { restaurant: 'Sri banashakari Military hotel' },
-    { restaurant: 'food king' },
-    { restaurant: 'Lassi And Juice' },
-    { restaurant: 'Samskruthi Grand' },
-    { restaurant: 'Breezy Cow Bar (1)' },
-    { restaurant: 'Breezy Cow Bar (2)' },
-    { restaurant: 'Cafe Prassiddhi Pure Veg' },
-    { restaurant: 'Oasis Dine House' },
-    { restaurant: 'Udaram Bharnam' },
-    { restaurant: 'Mana Vijayawada Ruchulu' },
-    { restaurant: 'Chennupati canteen' },
-    { restaurant: 'Shri Krishna Bhavan' },
-    { restaurant: 'Apna Punjabi Dhaba' },
-    { restaurant: 'The Pulp Fiction' },
-    { restaurant: 'For Food Lovers' },
-    { restaurant: 'Bazabi' },
-  ],
-
-  '2026-04-27': [
-    { restaurant: 'Anjanadris Palace', executive: 'Bareen' },
-    { restaurant: 'Cafe Aahaara', executive: 'Bareen' },
-    { restaurant: 'Jerry Cafe', executive: 'Bareen' },
-    { restaurant: 'Kerala Kitchen By Savoury', executive: 'Bareen' },
-    { restaurant: 'New York Pizza Co', executive: 'Bareen' },
-    { restaurant: 'SLN Mushroom Biryani', executive: 'Bareen' },
-    { restaurant: 'Sri Shivanandi Mushroom Donne Biriyani House', executive: 'Bareen' },
-    { restaurant: 'Vinayaka Refreshments', executive: 'Bareen' },
-    { restaurant: 'Bangalore Restaurant', executive: 'Lalitha' },
-    { restaurant: 'Biryani Junction', executive: 'Manyata' },
-    { restaurant: "Shelly's Deli", executive: 'Manyata' },
-    { restaurant: 'Biryani Station', executive: 'Neshavani' },
-    { restaurant: 'Hungry Tomato', executive: 'Neshavani' },
-    { restaurant: 'Delicious Momos', executive: 'Shruthi' },
-    { restaurant: 'Kannur Restaurant', executive: 'Shruthi' },
-    { restaurant: 'Millets Family', executive: 'Shruthi' },
-    { restaurant: 'Yum Yum Korean Bucket', executive: 'Shruthi' },
-  ],
-}
+const HISTORICAL_CSV = `date,restaurant,executive
+2026-04-22,Kayalum Kadalum,Bareen
+2026-04-22,Bungalow 47,Bareen
+2026-04-22,Al-Ansar Hotel,Bareen
+2026-04-22,Fanoos Xpress Since 1975,Bareen
+2026-04-22,Fanoos Xprss Since 1975,Bareen
+2026-04-22,Sri Hari Khadya Bhandar,Bareen
+2026-04-22,HOTEL FANOOS SINCE 1975,Bareen
+2026-04-22,HOTEL FANOOS SINCE 1975,Bareen
+2026-04-22,hotel aditya,Shruthi
+2026-04-22,bist dhaba (2),Shruthi
+2026-04-22,bist dhaba (2),Shruthi
+2026-04-22,ahhar veg,Shruthi
+2026-04-22,indian grill house,Shruthi
+2026-04-22,sitara veg,Shruthi
+2026-04-22,tandoori nights,Shruthi
+2026-04-22,sai sagaar,Shruthi
+2026-04-22,Ganesh Food Corner,Keerthana
+2026-04-22,Big Wok Chinese,Keerthana
+2026-04-22,A1 Delhi Dum Chicken Biryani,Keerthana
+2026-04-22,The coffee House,Lalitha
+2026-04-22,Attil Multi cuisine Restaurant,Lalitha
+2026-04-22,Udupi Sagar,Lalitha
+2026-04-22,Crack'D Cafe,Lalitha
+2026-04-22,Achayans Cafe 2.0,Lalitha
+2026-04-22,Bazabi,Lalitha
+2026-04-22,The Kerala Mess,Lalitha
+2026-04-22,Sabari Juice Junction,Neshavani
+2026-04-22,Kabab Mehal,Neshavani
+2026-04-22,Kabab Mehak,Neshavani
+2026-04-22,Kabab Street,Neshavani
+2026-04-22,Pattanshetty Hotel,Neshavani
+2026-04-23,Hotel Baaduta,Shruthi
+2026-04-23,Mizo Kitchen,Shruthi
+2026-04-23,Mrs Iyengar kitchen,Shruthi
+2026-04-23,shree guru sagar,Shruthi
+2026-04-23,bhyrava biriyani,Shruthi
+2026-04-23,Moms singh,Shruthi
+2026-04-23,Star Biryani,Keerthana
+2026-04-23,Board 4 Bored,Keerthana
+2026-04-23,Jain bites,Keerthana
+2026-04-23,Bowled over by Board 4 Bored,Keerthana
+2026-04-23,99 Variety Dosa And Pav Bhaji,Keerthana
+2026-04-23,Five Star,Keerthana
+2026-04-23,Sri Hari Khadya Bhandar,Bareen
+2026-04-23,Delhi Flavour,Bareen
+2026-04-23,Mysuru Thindiies [1],Bareen
+2026-04-23,Mysuru Thindiies [2],Bareen
+2026-04-23,New Darbar Family Restaurant,Bareen
+2026-04-23,Jai Bhavani Hotel,Bareen
+2026-04-23,Madurai Tiffin Center,Bareen
+2026-04-23,The Benne Mane,Lalitha
+2026-04-23,Dilli Bhature Chole,Lalitha
+2026-04-23,Big Scoop cafe,Lalitha
+2026-04-23,Desi Veg Cravings,Lalitha
+2026-04-23,Devansh Momos Corner,Lalitha
+2026-04-24,sankalpa reddy Restaurant(1),Shruthi
+2026-04-24,sankalpa reddy Restaurant(2),Shruthi
+2026-04-24,sankalpa reddy Restaurant(3),Shruthi
+2026-04-24,sankalpa reddy Restaurant(4),Shruthi
+2026-04-24,Antarastriya momo pasta (1),Shruthi
+2026-04-24,Antarastriya momo pasta (2),Shruthi
+2026-04-24,Antarastriya momo pasta (3),Shruthi
+2026-04-24,Antarastriya momo pasta (4),Shruthi
+2026-04-24,shareat panipuri,Shruthi
+2026-04-24,Cafe Corner,Lalitha
+2026-04-24,Kavin Restaurant,Lalitha
+2026-04-24,The Shades,Lalitha
+2026-04-24,Bhojan Bhavan,Lalitha
+2026-04-24,Hasanamba Iyengers Cake Mane,Lalitha
+2026-04-24,Luv u Bhojan,Lalitha
+2026-04-24,MBS Mandi House [1],Bareen
+2026-04-24,MBS Mandi House [2],Bareen
+2026-04-24,MBS Mandi House [3],Bareen
+2026-04-24,DirtyDogs [1],Bareen
+2026-04-24,DirtyDogs [2],Bareen
+2026-04-24,S M Bakery,Bareen
+2026-04-24,Yakshee Cafe,Bareen
+2026-04-25,24 Parganas,—
+2026-04-25,Ohhdaily - Healthy & Homely Tiffins [1],—
+2026-04-25,Ohhdaily - Healthy & Homely Tiffins [2],—
+2026-04-25,RR Chats [1],—
+2026-04-25,RR Chats [2],—
+2026-04-25,Naidu Hotel,—
+2026-04-25,Chakadola sweets,—
+2026-04-25,Meghana biriyani,—
+2026-04-25,Dande's Biriyani,—
+2026-04-25,Regal Feast,—
+2026-04-25,Sri banashakari Military hotel,—
+2026-04-25,food king,—
+2026-04-25,Lassi And Juice,—
+2026-04-25,Samskruthi Grand,—
+2026-04-25,Breezy Cow Bar (1),—
+2026-04-25,Breezy Cow Bar (2),—
+2026-04-25,Cafe Prassiddhi Pure Veg,—
+2026-04-25,Oasis Dine House,—
+2026-04-25,Udaram Bharnam,—
+2026-04-25,Mana Vijayawada Ruchulu,—
+2026-04-25,Chennupati canteen,—
+2026-04-25,Shri Krishna Bhavan,—
+2026-04-25,Apna Punjabi Dhaba,—
+2026-04-25,The Pulp Fiction,—
+2026-04-25,For Food Lovers,—
+2026-04-25,Bazabi,—
+2026-04-27,Anjanadris Palace,Bareen
+2026-04-27,Cafe Aahaara,Bareen
+2026-04-27,Jerry Cafe,Bareen
+2026-04-27,Kerala Kitchen By Savoury,Bareen
+2026-04-27,New York Pizza Co,Bareen
+2026-04-27,SLN Mushroom Biryani,Bareen
+2026-04-27,Sri Shivanandi Mushroom Donne Biriyani House,Bareen
+2026-04-27,Vinayaka Refreshments,Bareen
+2026-04-27,Bangalore Restaurant,Lalitha
+2026-04-27,Biryani Junction,Manyata
+2026-04-27,Shelly's Deli,Manyata
+2026-04-27,Biryani Station,Neshavani
+2026-04-27,Hungry Tomato,Neshavani
+2026-04-27,Delicious Momos,Shruthi
+2026-04-27,Kannur Restaurant,Shruthi
+2026-04-27,Millets Family,Shruthi
+2026-04-27,Yum Yum Korean Bucket,Shruthi`
 
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
   if (!supabaseUrl) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
   if (!serviceRoleKey) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
-
   return createClient(supabaseUrl, serviceRoleKey)
 }
 
@@ -188,7 +165,6 @@ function formatDateLabel(dateStr: string) {
 
 function formatDateTimeIST(value: string | null) {
   if (!value) return '—'
-
   return new Date(value).toLocaleString('en-IN', {
     timeZone: 'Asia/Kolkata',
     day: 'numeric',
@@ -200,90 +176,90 @@ function formatDateTimeIST(value: string | null) {
   })
 }
 
+function startOfISTDayUtc(dateStr: string) {
+  return new Date(`${dateStr}T00:00:00+05:30`).toISOString()
+}
+
+function endOfISTDayUtc(dateStr: string) {
+  return new Date(`${dateStr}T23:59:59.999+05:30`).toISOString()
+}
+
 function matchesSearch(values: unknown[], search: string) {
   if (!search) return true
   return values.filter(Boolean).some((v) => String(v).toLowerCase().includes(search))
 }
 
 function buildHistoricalRows(date: string): OnboardedRow[] {
-  const rows = HISTORICAL_ROWS[date] || []
-
-  return rows.map((row) => ({
-    brand_name: row.restaurant,
-    converted_at: date,
-    converted_at_label: formatDateLabel(date),
-    changed_by: row.executive || '—',
-    source_sheet: HISTORICAL_SOURCE_NAME,
-  }))
+  return HISTORICAL_CSV.trim().split('\n').slice(1).map((line) => {
+    const [rowDate, restaurant, executive = '—'] = line.split(',')
+    return {
+      brand_name: restaurant.trim(),
+      converted_at: rowDate.trim(),
+      converted_at_label: formatDateLabel(rowDate.trim()),
+      changed_by: executive.trim() || '—',
+      source_sheet: HISTORICAL_SOURCE_NAME,
+    }
+  }).filter((row) => row.converted_at === date)
 }
 
 function dedupeRows(rows: OnboardedRow[]) {
   const seen = new Set<string>()
   const output: OnboardedRow[] = []
-
   for (const row of rows) {
     const key = `${row.brand_name.trim().toLowerCase()}::${row.converted_at}`
-
     if (seen.has(key)) continue
-
     seen.add(key)
     output.push(row)
   }
-
   return output
 }
 
-/**
- * Permanent future-date logic.
- *
- * The sync route should set:
- * - restaurants.onboarded_at
- * - restaurants.onboarded_business_date
- *
- * This page reads that stored business date.
- * It no longer guesses using updated_at / synced_at / activity log timestamps.
- */
-async function buildOnboardedRowsFromRestaurants(
-  supabase: ReturnType<typeof createClient>,
-  date: string
-): Promise<OnboardedRow[]> {
+function isLikelyHumanConversion(row: any) {
+  const newStatus = String(row.new_status || '').trim().toLowerCase()
+  const oldStatus = String(row.old_status || '').trim().toLowerCase()
+  const changedBy = String(row.changed_by || '').trim().toLowerCase()
+
+  return (
+    newStatus === 'converted' &&
+    oldStatus !== 'converted' &&
+    changedBy !== '' &&
+    changedBy !== 'sheet sync' &&
+    changedBy !== 'system'
+  )
+}
+
+async function buildActivityRowsForDate(supabase: any, date: string): Promise<OnboardedRow[]> {
   const { data, error } = await supabase
-    .from('restaurants')
-    .select(
-      'restaurant_name, assigned_to_name, source_sheet, onboarded_at, onboarded_business_date, converted, lead_status'
-    )
-    .eq('onboarded_business_date', date)
-    .order('onboarded_at', { ascending: false })
+    .from('restaurant_activity_log')
+    .select('restaurant_name, source_sheet, changed_by, old_status, new_status, changed_at')
+    .gte('changed_at', startOfISTDayUtc(date))
+    .lte('changed_at', endOfISTDayUtc(date))
+    .order('changed_at', { ascending: false })
 
   if (error) throw new Error(error.message)
 
-  const rows = (data || [])
-    .filter((row: any) => normalizeStatus(row.lead_status, row.converted) === 'converted')
-    .map((row: any) => ({
-      brand_name: row.restaurant_name || '—',
-      converted_at: date,
-      converted_at_label: formatDateLabel(date),
-      changed_by: row.assigned_to_name || '—',
-      source_sheet: row.source_sheet || ACTIVITY_SOURCE_NAME,
-    }))
-
-  return dedupeRows(rows)
+  return dedupeRows((data || []).filter(isLikelyHumanConversion).map((row: any) => ({
+    brand_name: row.restaurant_name || '—',
+    converted_at: date,
+    converted_at_label: formatDateLabel(date),
+    changed_by: row.changed_by || '—',
+    source_sheet: row.source_sheet || ACTIVITY_SOURCE_NAME,
+  })))
 }
 
-async function buildTotalRows(supabase: ReturnType<typeof createClient>, search: string) {
+async function buildTotalRows(supabase: any, search: string) {
   const rows = await fetchAllActiveRestaurants(
     supabase,
-    'id, restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, onboarded_at, onboarded_business_date, lead_status, converted, is_deactivated'
+    'id, restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted, is_deactivated'
   )
-
   return (rows || [])
     .filter((row: any) => normalizeStatus(row.lead_status, row.converted) === 'converted')
     .map((row: any) => ({
       brand_name: row.restaurant_name || '—',
       assigned_to: row.assigned_to_name || 'Unassigned',
       source_sheet: row.source_sheet || TOTAL_SOURCE_NAME,
-      last_updated: row.onboarded_at || row.updated_at || row.synced_at || null,
-      last_updated_label: formatDateTimeIST(row.onboarded_at || row.updated_at || row.synced_at || null),
+      last_updated: row.updated_at || row.synced_at || null,
+      last_updated_label: formatDateTimeIST(row.updated_at || row.synced_at || null),
     }))
     .filter((row: any) => matchesSearch([row.brand_name, row.assigned_to, row.source_sheet], search))
 }
@@ -291,46 +267,22 @@ async function buildTotalRows(supabase: ReturnType<typeof createClient>, search:
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-
     const selectedDate = (searchParams.get('date') || searchParams.get('from') || getDefaultYesterdayIST()).trim()
     const search = (searchParams.get('search') || '').trim().toLowerCase()
-
     const supabase = getSupabaseAdmin()
 
-    const dailySourceRows =
-      selectedDate <= HISTORICAL_END_DATE
-        ? buildHistoricalRows(selectedDate)
-        : await buildOnboardedRowsFromRestaurants(supabase, selectedDate)
-
-    const dailyBrands = dailySourceRows.filter((row) =>
-      matchesSearch([row.brand_name, row.changed_by, row.source_sheet], search)
-    )
-
+    const dailySourceRows = selectedDate <= HISTORICAL_END_DATE ? buildHistoricalRows(selectedDate) : await buildActivityRowsForDate(supabase, selectedDate)
+    const dailyBrands = dailySourceRows.filter((row) => matchesSearch([row.brand_name, row.changed_by, row.source_sheet], search))
     const allBrands = await buildTotalRows(supabase, search)
 
     return NextResponse.json({
       success: true,
-      summary: {
-        selectedDate,
-        fromDate: selectedDate,
-        toDate: selectedDate,
-        yesterdayCount: dailyBrands.length,
-        totalBrandsTillDate: allBrands.length,
-      },
+      summary: { selectedDate, fromDate: selectedDate, toDate: selectedDate, yesterdayCount: dailyBrands.length, totalBrandsTillDate: allBrands.length },
       yesterdayBrands: dailyBrands,
       allBrands,
-      source:
-        selectedDate <= HISTORICAL_END_DATE
-          ? `${HISTORICAL_SOURCE_NAME} for selected-day verified report; ${TOTAL_SOURCE_NAME} for total`
-          : `${ACTIVITY_SOURCE_NAME} from restaurants.onboarded_business_date; ${TOTAL_SOURCE_NAME} for total`,
+      source: selectedDate <= HISTORICAL_END_DATE ? `${HISTORICAL_SOURCE_NAME} for selected-day verified report; ${TOTAL_SOURCE_NAME} for total` : `${ACTIVITY_SOURCE_NAME} human converted rows only; ${TOTAL_SOURCE_NAME} for total`,
     })
   } catch (error) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 })
   }
 }
