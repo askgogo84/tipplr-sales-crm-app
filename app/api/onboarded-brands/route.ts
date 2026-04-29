@@ -14,7 +14,7 @@ type OnboardedRow = {
 }
 
 const FINAL_LIST_SHEET = 'Final List'
-const FINAL_LIST_SOURCE = 'Final List Column D + Column G'
+const FINAL_LIST_SOURCE = 'Final List: Column A Brand + Column D Date + Column G Converted Yes'
 const TOTAL_SOURCE_NAME = 'CRM Converted Restaurants'
 
 function getSupabaseAdmin() {
@@ -29,7 +29,6 @@ function getSupabaseAdmin() {
 
 function getGoogleCredentials() {
   const envJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
-
   if (!envJson) throw new Error('Missing GOOGLE_SERVICE_ACCOUNT_JSON in environment')
 
   try {
@@ -48,27 +47,23 @@ function getDefaultYesterdayIST() {
 
 function normalizeDate(value: unknown): string | null {
   if (value === undefined || value === null) return null
-
   const raw = String(value).trim()
   if (!raw) return null
 
   const cleaned = raw.replace(/\//g, '-').trim()
 
-  // YYYY-MM-DD
   const yyyyMmDd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
   if (yyyyMmDd) {
     const [, yyyy, mm, dd] = yyyyMmDd
     return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`
   }
 
-  // DD-MM-YYYY
   const ddMmYyyy = cleaned.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
   if (ddMmYyyy) {
     const [, dd, mm, yyyy] = ddMmYyyy
     return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`
   }
 
-  // Google Sheets serial date
   const serial = Number(cleaned)
   if (!Number.isNaN(serial) && serial > 30000 && serial < 60000) {
     const excelEpoch = new Date(Date.UTC(1899, 11, 30))
@@ -81,7 +76,7 @@ function normalizeDate(value: unknown): string | null {
 
 function isYes(value: unknown) {
   const v = String(value || '').trim().toLowerCase()
-  return ['yes', 'y', 'true', '1', 'converted', 'live'].includes(v)
+  return ['yes', 'y', 'true', '1', 'converted'].includes(v)
 }
 
 function formatDateLabel(dateStr: string) {
@@ -112,20 +107,6 @@ function matchesSearch(values: unknown[], search: string) {
   return values.filter(Boolean).some((v) => String(v).toLowerCase().includes(search))
 }
 
-function dedupeRows(rows: OnboardedRow[]) {
-  const seen = new Set<string>()
-  const output: OnboardedRow[] = []
-
-  for (const row of rows) {
-    const key = `${row.brand_name.trim().toLowerCase()}::${row.converted_at}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    output.push(row)
-  }
-
-  return output
-}
-
 async function fetchFinalListRowsForDate(selectedDate: string): Promise<OnboardedRow[]> {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID
   if (!spreadsheetId) throw new Error('Missing GOOGLE_SHEET_ID')
@@ -142,26 +123,24 @@ async function fetchFinalListRowsForDate(selectedDate: string): Promise<Onboarde
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: `${FINAL_LIST_SHEET}!A:G`,
-    valueRenderOption: 'UNFORMATTED_VALUE',
-    dateTimeRenderOption: 'SERIAL_NUMBER',
+    valueRenderOption: 'FORMATTED_VALUE',
   })
 
   const rows = response.data.values || []
   const dataRows = rows.slice(1)
-
   const onboardedRows: OnboardedRow[] = []
 
   for (const row of dataRows) {
-    // Final List fixed columns:
-    // A = Brand Name, D = Date, E = Name/Executive, G = Converted
+    // Fixed Google Sheet columns:
+    // A = Brand Name, D = Date, E = Executive, G = Converted
     const restaurantName = String(row[0] || '').trim()
     const date = normalizeDate(row[3])
     const executive = String(row[4] || '—').trim() || '—'
     const converted = isYes(row[6])
 
     if (!restaurantName) continue
-    if (!converted) continue
     if (date !== selectedDate) continue
+    if (!converted) continue
 
     onboardedRows.push({
       brand_name: restaurantName,
@@ -172,7 +151,7 @@ async function fetchFinalListRowsForDate(selectedDate: string): Promise<Onboarde
     })
   }
 
-  return dedupeRows(onboardedRows)
+  return onboardedRows
 }
 
 async function buildTotalRows(supabase: ReturnType<typeof createClient>, search: string) {
@@ -196,12 +175,10 @@ async function buildTotalRows(supabase: ReturnType<typeof createClient>, search:
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-
     const selectedDate = (searchParams.get('date') || searchParams.get('from') || getDefaultYesterdayIST()).trim()
     const search = (searchParams.get('search') || '').trim().toLowerCase()
 
     const supabase = getSupabaseAdmin()
-
     const dailyBrands = (await fetchFinalListRowsForDate(selectedDate)).filter((row) =>
       matchesSearch([row.brand_name, row.changed_by, row.source_sheet], search)
     )
@@ -223,10 +200,7 @@ export async function GET(req: NextRequest) {
     })
   } catch (error) {
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      },
+      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }
