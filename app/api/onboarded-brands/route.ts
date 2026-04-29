@@ -193,31 +193,32 @@ function isRealConvertedTransition(row: any) {
   const oldStatus = String(row.old_status || '').trim().toLowerCase()
   const newStatus = String(row.new_status || '').trim().toLowerCase()
   const changedBy = String(row.changed_by || '').trim().toLowerCase()
-
-  return (
-    newStatus === 'converted' &&
-    oldStatus !== '' &&
-    oldStatus !== 'converted' &&
-    changedBy !== '' &&
-    changedBy !== 'sheet sync' &&
-    changedBy !== 'system'
-  )
+  return newStatus === 'converted' && oldStatus !== 'converted' && changedBy !== '' && changedBy !== 'sheet sync' && changedBy !== 'system'
 }
 
 function buildHistoricalRows(): OnboardedRow[] {
-  return HISTORICAL_CSV.trim()
-    .split('\n')
-    .slice(1)
-    .map((line) => {
-      const [date, restaurant, executive = '—'] = line.split(',')
-      return {
-        brand_name: restaurant.trim(),
-        converted_at: date.trim(),
-        converted_at_label: formatDateLabel(date.trim()),
-        changed_by: executive.trim() || '—',
-        source_sheet: HISTORICAL_SOURCE_NAME,
-      }
-    })
+  return HISTORICAL_CSV.trim().split('\n').slice(1).map((line) => {
+    const [date, restaurant, executive = '—'] = line.split(',')
+    return {
+      brand_name: restaurant.trim(),
+      converted_at: date.trim(),
+      converted_at_label: formatDateLabel(date.trim()),
+      changed_by: executive.trim() || '—',
+      source_sheet: HISTORICAL_SOURCE_NAME,
+    }
+  })
+}
+
+function dedupeRows(rows: OnboardedRow[]) {
+  const seen = new Set<string>()
+  const output: OnboardedRow[] = []
+  for (const row of rows) {
+    const key = `${row.brand_name.trim().toLowerCase()}::${row.converted_at}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    output.push(row)
+  }
+  return output
 }
 
 async function buildActivityRowsForDate(supabase: any, date: string): Promise<OnboardedRow[]> {
@@ -227,18 +228,14 @@ async function buildActivityRowsForDate(supabase: any, date: string): Promise<On
     .gte('changed_at', startOfISTDayUtc(date))
     .lte('changed_at', endOfISTDayUtc(date))
     .order('changed_at', { ascending: false })
-
   if (error) throw new Error(error.message)
-
-  return (data || [])
-    .filter(isRealConvertedTransition)
-    .map((row: any) => ({
-      brand_name: row.restaurant_name || '—',
-      converted_at: date,
-      converted_at_label: formatDateLabel(date),
-      changed_by: row.changed_by || '—',
-      source_sheet: row.source_sheet || ACTIVITY_SOURCE_NAME,
-    }))
+  return dedupeRows((data || []).filter(isRealConvertedTransition).map((row: any) => ({
+    brand_name: row.restaurant_name || '—',
+    converted_at: date,
+    converted_at_label: formatDateLabel(date),
+    changed_by: row.changed_by || '—',
+    source_sheet: row.source_sheet || ACTIVITY_SOURCE_NAME,
+  })))
 }
 
 async function buildTotalRows(supabase: any, search: string) {
@@ -246,7 +243,6 @@ async function buildTotalRows(supabase: any, search: string) {
     supabase,
     'id, restaurant_name, assigned_to_name, source_sheet, updated_at, synced_at, lead_status, converted, is_deactivated'
   )
-
   return (rows || [])
     .filter((row: any) => normalizeStatus(row.lead_status, row.converted) === 'converted')
     .map((row: any) => ({
@@ -265,36 +261,17 @@ export async function GET(req: NextRequest) {
     const selectedDate = (searchParams.get('date') || searchParams.get('from') || getDefaultYesterdayIST()).trim()
     const search = (searchParams.get('search') || '').trim().toLowerCase()
     const supabase = getSupabaseAdmin()
-
-    const dailySourceRows = selectedDate <= HISTORICAL_END_DATE
-      ? buildHistoricalRows()
-      : await buildActivityRowsForDate(supabase, selectedDate)
-
-    const dailyBrands = dailySourceRows
-      .filter((row) => row.converted_at === selectedDate)
-      .filter((row) => matchesSearch([row.brand_name, row.changed_by, row.source_sheet], search))
-
+    const dailySourceRows = selectedDate <= HISTORICAL_END_DATE ? buildHistoricalRows() : await buildActivityRowsForDate(supabase, selectedDate)
+    const dailyBrands = dailySourceRows.filter((row) => row.converted_at === selectedDate).filter((row) => matchesSearch([row.brand_name, row.changed_by, row.source_sheet], search))
     const allBrands = await buildTotalRows(supabase, search)
-
     return NextResponse.json({
       success: true,
-      summary: {
-        selectedDate,
-        fromDate: selectedDate,
-        toDate: selectedDate,
-        yesterdayCount: dailyBrands.length,
-        totalBrandsTillDate: allBrands.length,
-      },
+      summary: { selectedDate, fromDate: selectedDate, toDate: selectedDate, yesterdayCount: dailyBrands.length, totalBrandsTillDate: allBrands.length },
       yesterdayBrands: dailyBrands,
       allBrands,
-      source: selectedDate <= HISTORICAL_END_DATE
-        ? `${HISTORICAL_SOURCE_NAME} for selected-day verified report; ${TOTAL_SOURCE_NAME} for total`
-        : `${ACTIVITY_SOURCE_NAME} real converted transitions only; ${TOTAL_SOURCE_NAME} for total`,
+      source: selectedDate <= HISTORICAL_END_DATE ? `${HISTORICAL_SOURCE_NAME} for selected-day verified report; ${TOTAL_SOURCE_NAME} for total` : `${ACTIVITY_SOURCE_NAME} real converted transitions only; ${TOTAL_SOURCE_NAME} for total`,
     })
   } catch (error) {
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 })
   }
 }
