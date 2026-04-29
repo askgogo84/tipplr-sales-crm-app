@@ -1,166 +1,166 @@
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-import { createClient } from '@supabase/supabase-js'
+import { google } from 'googleapis'
 import DigestClient from './DigestClient'
 
-function getSupabaseAdmin() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+type DigestRow = {
+  restaurant_name: string
+  executive: string
+  status: string
+  source_sheet: string
+  changed_at: string
+}
 
-  if (!supabaseUrl) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
-  if (!serviceRoleKey) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
+const FINAL_LIST_SHEET = 'Final List'
 
-  return createClient(supabaseUrl, serviceRoleKey)
+function getGoogleCredentials() {
+  const envJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+  if (!envJson) throw new Error('Missing GOOGLE_SERVICE_ACCOUNT_JSON in environment')
+
+  try {
+    return JSON.parse(envJson)
+  } catch {
+    throw new Error('Invalid GOOGLE_SERVICE_ACCOUNT_JSON format')
+  }
 }
 
 function getISTDateString(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
 
-function startOfISTDayUtc(dateStr: string) {
-  return new Date(`${dateStr}T00:00:00+05:30`).toISOString()
+function normalizeDate(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  const raw = String(value).trim()
+  if (!raw) return null
+
+  const cleaned = raw.replace(/\//g, '-').trim()
+
+  const yyyyMmDd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (yyyyMmDd) {
+    const [, yyyy, mm, dd] = yyyyMmDd
+    return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`
+  }
+
+  const ddMmYyyy = cleaned.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
+  if (ddMmYyyy) {
+    const [, dd, mm, yyyy] = ddMmYyyy
+    return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`
+  }
+
+  const serial = Number(cleaned)
+  if (!Number.isNaN(serial) && serial > 30000 && serial < 60000) {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30))
+    excelEpoch.setUTCDate(excelEpoch.getUTCDate() + serial)
+    return excelEpoch.toISOString().slice(0, 10)
+  }
+
+  return null
 }
 
-function endOfISTDayUtc(dateStr: string) {
-  return new Date(`${dateStr}T23:59:59.999+05:30`).toISOString()
+function isYes(value: unknown) {
+  const v = String(value || '').trim().toLowerCase()
+  return ['yes', 'y', 'true', '1', 'converted'].includes(v)
 }
 
 function normaliseName(value: unknown) {
   const raw = String(value || '').trim()
-  if (!raw) return 'Unassigned'
-
-  const lower = raw.toLowerCase()
-  if (['sheet sync', 'system', 'unknown', '—', '-'].includes(lower)) return 'Unassigned'
-
-  return raw
+  return raw || 'Unassigned'
 }
 
-function normaliseStatus(value: unknown) {
-  return String(value || '').trim().toLowerCase()
-}
+async function fetchFinalListConvertedRows(selectedDate: string): Promise<DigestRow[]> {
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID
+  if (!spreadsheetId) throw new Error('Missing GOOGLE_SHEET_ID')
 
-function displayStatus(value: unknown) {
-  const s = normaliseStatus(value)
-  if (s === 'converted') return 'Converted'
-  if (s === 'agreed') return 'Agreed'
-  if (s === 'followup' || s === 'follow up') return 'Followup'
-  if (s === 'call back' || s === 'callback') return 'Call Back'
-  if (s === 'not interested') return 'Not Interested'
-  if (s === 'lead') return 'Lead'
-  return String(value || 'Updated')
+  const credentials = getGoogleCredentials()
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+  })
+
+  const sheets = google.sheets({ version: 'v4', auth })
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${FINAL_LIST_SHEET}!A:G`,
+    valueRenderOption: 'FORMATTED_VALUE',
+  })
+
+  const rows = response.data.values || []
+  const dataRows = rows.slice(1)
+  const result: DigestRow[] = []
+  const seen = new Set<string>()
+
+  for (const row of dataRows) {
+    // Final List fixed columns:
+    // A = Brand Name, D = Date, E = Executive, G = Converted
+    const restaurantName = String(row[0] || '').trim()
+    const rowDate = normalizeDate(row[3])
+    const executive = normaliseName(row[4])
+    const converted = isYes(row[6])
+
+    if (!restaurantName) continue
+    if (rowDate !== selectedDate) continue
+    if (!converted) continue
+
+    const key = `${restaurantName.toLowerCase()}::${executive.toLowerCase()}::${selectedDate}`
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    result.push({
+      restaurant_name: restaurantName,
+      executive,
+      status: 'Converted',
+      source_sheet: FINAL_LIST_SHEET,
+      changed_at: selectedDate,
+    })
+  }
+
+  return result
 }
 
 export default async function DigestPage() {
   try {
-    const supabase = getSupabaseAdmin()
     const selectedDate = getISTDateString()
-    const todayStartIso = startOfISTDayUtc(selectedDate)
-    const todayEndIso = endOfISTDayUtc(selectedDate)
+    const convertedRows = await fetchFinalListConvertedRows(selectedDate)
 
-    const { data: activities, error } = await supabase
-      .from('restaurant_activity_log')
-      .select('restaurant_id, restaurant_name, source_sheet, old_status, new_status, changed_by, changed_at')
-      .gte('changed_at', todayStartIso)
-      .lte('changed_at', todayEndIso)
-      .order('changed_at', { ascending: false })
-      .limit(5000)
+    const repMap = new Map<string, { converted: number; restaurants: string[] }>()
 
-    if (error) throw new Error(error.message)
-
-    const rawRows = activities || []
-
-    const restaurantIds = Array.from(
-      new Set(rawRows.map((row: any) => row.restaurant_id).filter(Boolean))
-    )
-
-    let restaurants: any[] = []
-    if (restaurantIds.length > 0) {
-      const { data } = await supabase
-        .from('restaurants')
-        .select('id, assigned_to_name, restaurant_name, source_sheet, follow_up_date, lead_status, converted')
-        .in('id', restaurantIds)
-      restaurants = data || []
-    }
-
-    const restaurantMap = new Map(restaurants.map((row: any) => [row.id, row]))
-
-    const cleanedRows = rawRows.map((row: any) => {
-      const restaurant = restaurantMap.get(row.restaurant_id)
-      const changedBy = normaliseName(row.changed_by)
-      const executive = changedBy === 'Unassigned'
-        ? normaliseName(restaurant?.assigned_to_name)
-        : changedBy
-
-      return {
-        ...row,
-        executive,
-        restaurant_name: row.restaurant_name || restaurant?.restaurant_name || 'Unnamed Restaurant',
-        source_sheet: row.source_sheet || restaurant?.source_sheet || 'CRM',
-        status: displayStatus(row.new_status),
-        statusKey: normaliseStatus(row.new_status),
-      }
-    })
-
-    const repMap = new Map<string, {
-      updated: number
-      agreed: number
-      converted: number
-      followup: number
-      callback: number
-      notInterested: number
-      restaurants: string[]
-    }>()
-
-    for (const row of cleanedRows) {
+    for (const row of convertedRows) {
       const name = row.executive || 'Unassigned'
       if (!repMap.has(name)) {
-        repMap.set(name, {
-          updated: 0,
-          agreed: 0,
-          converted: 0,
-          followup: 0,
-          callback: 0,
-          notInterested: 0,
-          restaurants: [],
-        })
+        repMap.set(name, { converted: 0, restaurants: [] })
       }
 
       const stat = repMap.get(name)!
-      stat.updated++
+      stat.converted++
       stat.restaurants.push(row.restaurant_name)
-
-      if (row.statusKey === 'agreed') stat.agreed++
-      if (row.statusKey === 'converted') stat.converted++
-      if (row.statusKey === 'followup' || row.statusKey === 'follow up') stat.followup++
-      if (row.statusKey === 'call back' || row.statusKey === 'callback') stat.callback++
-      if (row.statusKey === 'not interested') stat.notInterested++
     }
 
     const execStats = Array.from(repMap.entries())
       .map(([name, s]) => ({
         name,
-        updated: s.updated,
-        agreed: s.agreed,
+        updated: s.converted,
+        agreed: 0,
         converted: s.converted,
-        closed: s.agreed + s.converted,
-        followup: s.followup,
-        callback: s.callback,
-        notInterested: s.notInterested,
-        restaurants: Array.from(new Set(s.restaurants)).slice(0, 8),
+        closed: s.converted,
+        followup: 0,
+        callback: 0,
+        notInterested: 0,
+        restaurants: Array.from(new Set(s.restaurants)),
       }))
-      .sort((a, b) => b.closed - a.closed || b.updated - a.updated)
+      .sort((a, b) => b.converted - a.converted || a.name.localeCompare(b.name))
 
-    const totalUpdatedToday = cleanedRows.length
-    const totalAgreed = cleanedRows.filter((x: any) => x.statusKey === 'agreed').length
-    const totalConverted = cleanedRows.filter((x: any) => x.statusKey === 'converted').length
-    const totalClosed = totalAgreed + totalConverted
-    const totalFollowup = cleanedRows.filter((x: any) => ['followup', 'follow up'].includes(x.statusKey)).length
-    const totalCallback = cleanedRows.filter((x: any) => ['call back', 'callback'].includes(x.statusKey)).length
-    const totalNotInterested = cleanedRows.filter((x: any) => x.statusKey === 'not interested').length
-    const conversionRate = totalUpdatedToday > 0 ? ((totalClosed / totalUpdatedToday) * 100).toFixed(1) : '0.0'
+    const totalConverted = convertedRows.length
+    const totalUpdatedToday = totalConverted
+    const totalAgreed = 0
+    const totalClosed = totalConverted
+    const totalFollowup = 0
+    const totalCallback = 0
+    const totalNotInterested = 0
+    const conversionRate = totalUpdatedToday > 0 ? '100.0' : '0.0'
 
-    const recentActivities = cleanedRows.slice(0, 30).map((row: any) => ({
+    const recentActivities = convertedRows.map((row) => ({
       restaurant_name: row.restaurant_name,
       executive: row.executive,
       status: row.status,
@@ -168,7 +168,7 @@ export default async function DigestPage() {
       changed_at: row.changed_at,
     }))
 
-    const dateLabel = new Date().toLocaleDateString('en-IN', {
+    const dateLabel = new Date(`${selectedDate}T12:00:00+05:30`).toLocaleDateString('en-IN', {
       timeZone: 'Asia/Kolkata',
       weekday: 'long',
       day: 'numeric',
