@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 type ExecStat = {
@@ -27,6 +28,7 @@ export default function DigestClient({
   recentActivities,
   totalConverted,
   dateLabel,
+  selectedDate,
 }: {
   execStats: ExecStat[]
   recentActivities: RecentActivity[]
@@ -39,9 +41,12 @@ export default function DigestClient({
   totalNotInterested: number
   conversionRate: string
   dateLabel: string
+  selectedDate: string
 }) {
+  const router = useRouter()
   const [copied, setCopied] = useState<string | null>(null)
   const [customNote, setCustomNote] = useState('')
+  const [dateInput, setDateInput] = useState(selectedDate)
 
   function copy(text: string, key: string) {
     navigator.clipboard.writeText(text).then(() => {
@@ -50,11 +55,18 @@ export default function DigestClient({
     })
   }
 
+  function applyDate() {
+    router.push(`/digest?date=${dateInput}`)
+  }
+
+  function resetDate() {
+    router.push('/digest')
+  }
+
   const executiveLines = execStats.length
     ? execStats.map((e) => `• *${e.name}:* ${e.converted} converted`)
-    : ['• No restaurants converted today']
+    : ['• No restaurants converted for this date']
 
-  // Keep this list in the exact same order as the Onboarded Brands page.
   const restaurantLines = recentActivities.map(
     (row, index) => `${index + 1}. ${row.restaurant_name}${row.executive ? ` — ${row.executive}` : ''}`
   )
@@ -89,7 +101,7 @@ export default function DigestClient({
           const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
           return `${medal} *${e.name}* — ${e.converted} converted`
         })
-      : ['No restaurants converted today']),
+      : ['No restaurants converted for this date']),
     ``,
     `Grand Total: ${totalConverted} converted`,
   ].join('\n')
@@ -128,6 +140,35 @@ export default function DigestClient({
         <p className="mt-1 text-sm leading-6 text-slate-500">
           Executive-wise converted restaurant count from Final List · {dateLabel}
         </p>
+
+        <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+          <div className="grid gap-3 sm:grid-cols-[220px_120px_120px_1fr] sm:items-end">
+            <div>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Digest Date</label>
+              <input
+                type="date"
+                value={dateInput}
+                onChange={(e) => setDateInput(e.target.value)}
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400"
+              />
+            </div>
+            <button
+              onClick={applyDate}
+              className="h-11 rounded-2xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-95"
+            >
+              Apply
+            </button>
+            <button
+              onClick={resetDate}
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 active:scale-95"
+            >
+              Yesterday
+            </button>
+            <div className="text-xs leading-5 text-slate-500">
+              Reads Final List only: Column D date + Column G Converted = Yes, grouped by Column E executive.
+            </div>
+          </div>
+        </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center">
@@ -180,7 +221,7 @@ export default function DigestClient({
         <h2 className="mb-4 text-base font-semibold text-slate-900 sm:text-xl">Executive Breakdown</h2>
         <div className="space-y-3">
           {execStats.length === 0 ? (
-            <div className="py-6 text-center text-sm text-slate-500">No restaurants converted today</div>
+            <div className="py-6 text-center text-sm text-slate-500">No restaurants converted for this date</div>
           ) : execStats.map((e) => (
             <div key={e.name} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
               <div className="flex items-center justify-between gap-3">
@@ -209,7 +250,7 @@ export default function DigestClient({
             <div>Restaurant</div><div>Executive</div><div>Source</div>
           </div>
           {recentActivities.length === 0 ? (
-            <div className="px-4 py-8 text-sm text-slate-500">No converted restaurants found for today.</div>
+            <div className="px-4 py-8 text-sm text-slate-500">No converted restaurants found for this date.</div>
           ) : (
             <div className="divide-y divide-slate-100">
               {recentActivities.map((a, idx) => (
