@@ -12,6 +12,10 @@ type DigestRow = {
   changed_at: string
 }
 
+type PageSearchParams = {
+  date?: string | string[]
+}
+
 const FINAL_LIST_SHEET = 'Final List'
 
 function getGoogleCredentials() {
@@ -25,8 +29,18 @@ function getGoogleCredentials() {
   }
 }
 
-function getISTDateString(date = new Date()) {
-  return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+function getYesterdayISTDateString() {
+  const istDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+  istDate.setDate(istDate.getDate() - 1)
+  return istDate.toLocaleDateString('en-CA')
+}
+
+function safeDateFromSearchParam(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value[0] : value
+  if (!raw) return getYesterdayISTDateString()
+
+  const match = raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  return match ? raw.trim() : getYesterdayISTDateString()
 }
 
 function normalizeDate(value: unknown): string | null {
@@ -119,9 +133,14 @@ async function fetchFinalListConvertedRows(selectedDate: string): Promise<Digest
   return result
 }
 
-export default async function DigestPage() {
+export default async function DigestPage({
+  searchParams,
+}: {
+  searchParams?: Promise<PageSearchParams>
+}) {
   try {
-    const selectedDate = getISTDateString()
+    const resolvedSearchParams = searchParams ? await searchParams : {}
+    const selectedDate = safeDateFromSearchParam(resolvedSearchParams.date)
     const convertedRows = await fetchFinalListConvertedRows(selectedDate)
 
     const repMap = new Map<string, { converted: number; restaurants: string[] }>()
@@ -189,6 +208,7 @@ export default async function DigestPage() {
         totalNotInterested={totalNotInterested}
         conversionRate={conversionRate}
         dateLabel={dateLabel}
+        selectedDate={selectedDate}
       />
     )
   } catch (error) {
