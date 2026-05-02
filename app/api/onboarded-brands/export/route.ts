@@ -1,144 +1,21 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { google } from 'googleapis'
 import { createClient } from '@supabase/supabase-js'
 import { fetchAllActiveRestaurants, normalizeStatus } from '@/lib/crm-metrics'
-
-type RawRow = { date: string; restaurant: string; executive: string }
 
 type DailyExportRow = {
   sl_no: number
   restaurant_name: string
   onboarded_date: string
+  executive: string
   source: string
 }
 
-const HISTORICAL_SOURCE_NAME = 'Verified Daily Onboarding Report'
-const ACTIVITY_SOURCE_NAME = 'CRM Activity Log'
+const FINAL_LIST_SHEET = 'Final List'
+const FINAL_LIST_SOURCE = 'Final List Column D + Column G'
 const TOTAL_SOURCE_NAME = 'CRM Converted Restaurants'
-const HISTORICAL_END_DATE = '2026-04-27'
-
-const HISTORICAL_CSV = `date,restaurant,executive
-2026-04-22,Kayalum Kadalum,Bareen
-2026-04-22,Bungalow 47,Bareen
-2026-04-22,Al-Ansar Hotel,Bareen
-2026-04-22,Fanoos Xpress Since 1975,Bareen
-2026-04-22,Fanoos Xprss Since 1975,Bareen
-2026-04-22,Sri Hari Khadya Bhandar,Bareen
-2026-04-22,HOTEL FANOOS SINCE 1975,Bareen
-2026-04-22,HOTEL FANOOS SINCE 1975,Bareen
-2026-04-22,hotel aditya,Shruthi
-2026-04-22,bist dhaba (2),Shruthi
-2026-04-22,bist dhaba (2),Shruthi
-2026-04-22,ahhar veg,Shruthi
-2026-04-22,indian grill house,Shruthi
-2026-04-22,sitara veg,Shruthi
-2026-04-22,tandoori nights,Shruthi
-2026-04-22,sai sagaar,Shruthi
-2026-04-22,Ganesh Food Corner,Keerthana
-2026-04-22,Big Wok Chinese,Keerthana
-2026-04-22,A1 Delhi Dum Chicken Biryani,Keerthana
-2026-04-22,The coffee House,Lalitha
-2026-04-22,Attil Multi cuisine Restaurant,Lalitha
-2026-04-22,Udupi Sagar,Lalitha
-2026-04-22,Crack'D Cafe,Lalitha
-2026-04-22,Achayans Cafe 2.0,Lalitha
-2026-04-22,Bazabi,Lalitha
-2026-04-22,The Kerala Mess,Lalitha
-2026-04-22,Sabari Juice Junction,Neshavani
-2026-04-22,Kabab Mehal,Neshavani
-2026-04-22,Kabab Mehak,Neshavani
-2026-04-22,Kabab Street,Neshavani
-2026-04-22,Pattanshetty Hotel,Neshavani
-2026-04-23,Hotel Baaduta,Shruthi
-2026-04-23,Mizo Kitchen,Shruthi
-2026-04-23,Mrs Iyengar kitchen,Shruthi
-2026-04-23,shree guru sagar,Shruthi
-2026-04-23,bhyrava biriyani,Shruthi
-2026-04-23,Moms singh,Shruthi
-2026-04-23,Star Biryani,Keerthana
-2026-04-23,Board 4 Bored,Keerthana
-2026-04-23,Jain bites,Keerthana
-2026-04-23,Bowled over by Board 4 Bored,Keerthana
-2026-04-23,99 Variety Dosa And Pav Bhaji,Keerthana
-2026-04-23,Five Star,Keerthana
-2026-04-23,Sri Hari Khadya Bhandar,Bareen
-2026-04-23,Delhi Flavour,Bareen
-2026-04-23,Mysuru Thindiies [1],Bareen
-2026-04-23,Mysuru Thindiies [2],Bareen
-2026-04-23,New Darbar Family Restaurant,Bareen
-2026-04-23,Jai Bhavani Hotel,Bareen
-2026-04-23,Madurai Tiffin Center,Bareen
-2026-04-23,The Benne Mane,Lalitha
-2026-04-23,Dilli Bhature Chole,Lalitha
-2026-04-23,Big Scoop cafe,Lalitha
-2026-04-23,Desi Veg Cravings,Lalitha
-2026-04-23,Devansh Momos Corner,Lalitha
-2026-04-24,sankalpa reddy Restaurant(1),Shruthi
-2026-04-24,sankalpa reddy Restaurant(2),Shruthi
-2026-04-24,sankalpa reddy Restaurant(3),Shruthi
-2026-04-24,sankalpa reddy Restaurant(4),Shruthi
-2026-04-24,Antarastriya momo pasta (1),Shruthi
-2026-04-24,Antarastriya momo pasta (2),Shruthi
-2026-04-24,Antarastriya momo pasta (3),Shruthi
-2026-04-24,Antarastriya momo pasta (4),Shruthi
-2026-04-24,shareat panipuri,Shruthi
-2026-04-24,Cafe Corner,Lalitha
-2026-04-24,Kavin Restaurant,Lalitha
-2026-04-24,The Shades,Lalitha
-2026-04-24,Bhojan Bhavan,Lalitha
-2026-04-24,Hasanamba Iyengers Cake Mane,Lalitha
-2026-04-24,Luv u Bhojan,Lalitha
-2026-04-24,MBS Mandi House [1],Bareen
-2026-04-24,MBS Mandi House [2],Bareen
-2026-04-24,MBS Mandi House [3],Bareen
-2026-04-24,DirtyDogs [1],Bareen
-2026-04-24,DirtyDogs [2],Bareen
-2026-04-24,S M Bakery,Bareen
-2026-04-24,Yakshee Cafe,Bareen
-2026-04-25,24 Parganas,—
-2026-04-25,Ohhdaily - Healthy & Homely Tiffins [1],—
-2026-04-25,Ohhdaily - Healthy & Homely Tiffins [2],—
-2026-04-25,RR Chats [1],—
-2026-04-25,RR Chats [2],—
-2026-04-25,Naidu Hotel,—
-2026-04-25,Chakadola sweets,—
-2026-04-25,Meghana biriyani,—
-2026-04-25,Dande's Biriyani,—
-2026-04-25,Regal Feast,—
-2026-04-25,Sri banashakari Military hotel,—
-2026-04-25,food king,—
-2026-04-25,Lassi And Juice,—
-2026-04-25,Samskruthi Grand,—
-2026-04-25,Breezy Cow Bar (1),—
-2026-04-25,Breezy Cow Bar (2),—
-2026-04-25,Cafe Prassiddhi Pure Veg,—
-2026-04-25,Oasis Dine House,—
-2026-04-25,Udaram Bharnam,—
-2026-04-25,Mana Vijayawada Ruchulu,—
-2026-04-25,Chennupati canteen,—
-2026-04-25,Shri Krishna Bhavan,—
-2026-04-25,Apna Punjabi Dhaba,—
-2026-04-25,The Pulp Fiction,—
-2026-04-25,For Food Lovers,—
-2026-04-25,Bazabi,—
-2026-04-27,Anjanadris Palace,Bareen
-2026-04-27,Cafe Aahaara,Bareen
-2026-04-27,Jerry Cafe,Bareen
-2026-04-27,Kerala Kitchen By Savoury,Bareen
-2026-04-27,New York Pizza Co,Bareen
-2026-04-27,SLN Mushroom Biryani,Bareen
-2026-04-27,Sri Shivanandi Mushroom Donne Biriyani House,Bareen
-2026-04-27,Vinayaka Refreshments,Bareen
-2026-04-27,Bangalore Restaurant,Lalitha
-2026-04-27,Biryani Junction,Manyata
-2026-04-27,Shelly's Deli,Manyata
-2026-04-27,Biryani Station,Neshavani
-2026-04-27,Hungry Tomato,Neshavani
-2026-04-27,Delicious Momos,Shruthi
-2026-04-27,Kannur Restaurant,Shruthi
-2026-04-27,Millets Family,Shruthi
-2026-04-27,Yum Yum Korean Bucket,Shruthi`
 
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -148,6 +25,17 @@ function getSupabaseAdmin() {
   return createClient(supabaseUrl, serviceRoleKey)
 }
 
+function getGoogleCredentials() {
+  const envJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+  if (!envJson) throw new Error('Missing GOOGLE_SERVICE_ACCOUNT_JSON in environment')
+
+  try {
+    return JSON.parse(envJson)
+  } catch {
+    throw new Error('Invalid GOOGLE_SERVICE_ACCOUNT_JSON format')
+  }
+}
+
 function getDefaultYesterdayIST() {
   const now = new Date()
   const istDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
@@ -155,12 +43,38 @@ function getDefaultYesterdayIST() {
   return istDate.toLocaleDateString('en-CA')
 }
 
-function startOfISTDayUtc(dateStr: string) {
-  return new Date(`${dateStr}T00:00:00+05:30`).toISOString()
+function normalizeDate(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  const raw = String(value).trim()
+  if (!raw) return null
+
+  const cleaned = raw.replace(/\//g, '-').trim()
+
+  const yyyyMmDd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (yyyyMmDd) {
+    const [, yyyy, mm, dd] = yyyyMmDd
+    return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`
+  }
+
+  const ddMmYyyy = cleaned.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
+  if (ddMmYyyy) {
+    const [, dd, mm, yyyy] = ddMmYyyy
+    return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`
+  }
+
+  const serial = Number(cleaned)
+  if (!Number.isNaN(serial) && serial > 30000 && serial < 60000) {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30))
+    excelEpoch.setUTCDate(excelEpoch.getUTCDate() + serial)
+    return excelEpoch.toISOString().slice(0, 10)
+  }
+
+  return null
 }
 
-function endOfISTDayUtc(dateStr: string) {
-  return new Date(`${dateStr}T23:59:59.999+05:30`).toISOString()
+function isYes(value: unknown) {
+  const v = String(value || '').trim().toLowerCase()
+  return ['yes', 'y', 'true', '1', 'converted'].includes(v)
 }
 
 function escapeCsv(value: unknown) {
@@ -189,48 +103,54 @@ function matchesSearch(values: unknown[], search: string) {
   return values.filter(Boolean).some((v) => String(v).toLowerCase().includes(search))
 }
 
-function isRealConvertedTransition(row: any) {
-  const oldStatus = String(row.old_status || '').trim().toLowerCase()
-  const newStatus = String(row.new_status || '').trim().toLowerCase()
-  const changedBy = String(row.changed_by || '').trim().toLowerCase()
-  return newStatus === 'converted' && oldStatus !== '' && oldStatus !== 'converted' && changedBy !== '' && changedBy !== 'sheet sync' && changedBy !== 'system'
-}
+async function getFinalListRowsForDate(selectedDate: string): Promise<DailyExportRow[]> {
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID
+  if (!spreadsheetId) throw new Error('Missing GOOGLE_SHEET_ID')
 
-function getHistoricalRows(date: string): DailyExportRow[] {
-  return HISTORICAL_CSV.trim()
-    .split('\n')
-    .slice(1)
-    .map((line) => {
-      const [rowDate, restaurant] = line.split(',')
-      return { date: rowDate.trim(), restaurant: restaurant.trim() }
+  const credentials = getGoogleCredentials()
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+  })
+  const sheets = google.sheets({ version: 'v4', auth })
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${FINAL_LIST_SHEET}!A:G`,
+    valueRenderOption: 'FORMATTED_VALUE',
+  })
+
+  const rows = response.data.values || []
+  const dataRows = rows.slice(1)
+  const output: DailyExportRow[] = []
+  const seen = new Set<string>()
+
+  for (const row of dataRows) {
+    // Final List fixed columns:
+    // A = Brand Name, D = Date, E = Executive, G = Converted
+    const restaurantName = String(row[0] || '').trim()
+    const rowDate = normalizeDate(row[3])
+    const executive = String(row[4] || '—').trim() || '—'
+    const converted = isYes(row[6])
+
+    if (!restaurantName) continue
+    if (rowDate !== selectedDate) continue
+    if (!converted) continue
+
+    const key = `${restaurantName.toLowerCase()}::${rowDate}`
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    output.push({
+      sl_no: output.length + 1,
+      restaurant_name: restaurantName,
+      onboarded_date: selectedDate,
+      executive,
+      source: FINAL_LIST_SOURCE,
     })
-    .filter((row) => row.date === date)
-    .map((row, index) => ({
-      sl_no: index + 1,
-      restaurant_name: row.restaurant,
-      onboarded_date: row.date,
-      source: HISTORICAL_SOURCE_NAME,
-    }))
-}
+  }
 
-async function getActivityRowsForDate(supabase: any, date: string): Promise<DailyExportRow[]> {
-  const { data, error } = await supabase
-    .from('restaurant_activity_log')
-    .select('restaurant_name, source_sheet, old_status, new_status, changed_by, changed_at')
-    .gte('changed_at', startOfISTDayUtc(date))
-    .lte('changed_at', endOfISTDayUtc(date))
-    .order('changed_at', { ascending: false })
-
-  if (error) throw new Error(error.message)
-
-  return (data || [])
-    .filter(isRealConvertedTransition)
-    .map((row: any, index: number) => ({
-      sl_no: index + 1,
-      restaurant_name: row.restaurant_name || '—',
-      onboarded_date: date,
-      source: row.source_sheet || ACTIVITY_SOURCE_NAME,
-    }))
+  return output
 }
 
 async function getAllConvertedRows(supabase: any, search: string) {
@@ -261,7 +181,15 @@ export async function GET(req: NextRequest) {
     if (type === 'all') {
       const rows = await getAllConvertedRows(supabase, search)
       const headers = ['Brand Name', 'Assigned To', 'Source Sheet', 'Last Updated']
-      const lines = [headers.join(','), ...rows.map((row: any) => [escapeCsv(row.brand_name), escapeCsv(row.assigned_to), escapeCsv(row.source_sheet), escapeCsv(row.last_updated)].join(','))]
+      const lines = [
+        headers.join(','),
+        ...rows.map((row: any) => [
+          escapeCsv(row.brand_name),
+          escapeCsv(row.assigned_to),
+          escapeCsv(row.source_sheet),
+          escapeCsv(row.last_updated),
+        ].join(',')),
+      ]
 
       return new NextResponse('\uFEFF' + lines.join('\n'), {
         status: 200,
@@ -272,14 +200,22 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    const rows = selectedDate <= HISTORICAL_END_DATE
-      ? getHistoricalRows(selectedDate)
-      : await getActivityRowsForDate(supabase, selectedDate)
+    const rows = await getFinalListRowsForDate(selectedDate)
+    const filtered = rows.filter((row) =>
+      matchesSearch([row.restaurant_name, row.executive, row.source], search)
+    )
 
-    const filtered = rows.filter((row) => matchesSearch([row.restaurant_name, row.source], search))
-
-    const headers = ['SL No', 'Restaurant Name', 'Onboarded Date', 'Source']
-    const lines = [headers.join(','), ...filtered.map((row, index) => [escapeCsv(index + 1), escapeCsv(row.restaurant_name), escapeCsv(row.onboarded_date), escapeCsv(row.source)].join(','))]
+    const headers = ['SL No', 'Restaurant Name', 'Onboarded Date', 'Executive', 'Source']
+    const lines = [
+      headers.join(','),
+      ...filtered.map((row, index) => [
+        escapeCsv(index + 1),
+        escapeCsv(row.restaurant_name),
+        escapeCsv(row.onboarded_date),
+        escapeCsv(row.executive),
+        escapeCsv(row.source),
+      ].join(',')),
+    ]
 
     return new NextResponse('\uFEFF' + lines.join('\n'), {
       status: 200,
